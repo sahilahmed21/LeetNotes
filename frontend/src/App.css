@@ -1,0 +1,206 @@
+/* frontend/src/App.css */
+
+.App {
+    font-family: Arial, sans-serif;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    text-align: center;
+}
+
+header {
+    margin-bottom: 30px;
+}
+
+header h1 {
+    font-size: 2.5rem;
+    color: #2c3e50;
+}
+
+header p {
+    font-size: 1.2rem;
+    color: #7f8c8d;
+}
+
+.home {
+    background-color: #f9f9f9;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: #34495e;
+}
+
+.header button {
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.header button:hover {
+    background-color: #c0392b;
+}
+
+.login-container,
+.fetch-form,
+.notes-display,
+.generate-notes {
+    margin-bottom: 30px;
+}
+
+.login-container h2,
+.fetch-form h3,
+.notes-display h3 {
+    color: #2c3e50;
+    margin-bottom: 15px;
+}
+
+.login-container form,
+.fetch-form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+.login-container div,
+.fetch-form div {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+}
+
+.login-container label,
+.fetch-form label {
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: #34495e;
+}
+
+.login-container input,
+.fetch-form input {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+.login-container button,
+.fetch-form button,
+.generate-notes button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.3s;
+}
+
+.login-container button:hover,
+.fetch-form button:hover,
+.generate-notes button:hover {
+    background-color: #2980b9;
+}
+
+.login-container button:disabled,
+.fetch-form button:disabled,
+.generate-notes button:disabled {
+    background-color: #bdc3c7;
+    cursor: not-allowed;
+}
+
+.error {
+    color: #e74c3c;
+    font-size: 0.9rem;
+    margin: 10px 0;
+}
+
+.notes-display .note {
+    background-color: white;
+    padding: 15px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    margin-bottom: 15px;
+    text-align: left;
+}
+
+.notes-display h4 {
+    margin: 0 0 10px 0;
+    color: #2c3e50;
+}
+
+.notes-display pre {
+    background: #f4f4f4;
+    padding: 10px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.9rem;
+    white-space: pre-wrap;
+}
+
+/* Add to existing styles in App.css */
+
+.profile-stats {
+    background-color: white;
+    padding: 15px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    margin-bottom: 20px;
+    text-align: left;
+}
+
+.problems-list .problem {
+    background-color: white;
+    padding: 15px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    margin-bottom: 15px;
+    text-align: left;
+}
+
+.problem h4 {
+    margin: 0 0 10px 0;
+    color: #2c3e50;
+}
+
+.submission {
+    border-left: 3px solid #3498db;
+    padding-left: 10px;
+    margin: 10px 0;
+}
+
+.toggle-auth {
+    background: none;
+    border: none;
+    color: #3498db;
+    cursor: pointer;
+    font-size: 1rem;
+    text-decoration: underline;
+}
+
+.toggle-auth:hover {
+    color: #2980b9;
+}
+
+.message {
+    color: green;
+    margin: 10px 0;
+}

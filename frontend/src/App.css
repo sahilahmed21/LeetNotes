@@ -204,3 +204,268 @@ header p {
     color: green;
     margin: 10px 0;
 }
+
+.notes-display {
+    margin-top: 20px;
+    text-align: left;
+}
+
+.note {
+    border: 1px solid #ddd;
+    padding: 15px;
+    margin: 15px 0;
+    border-radius: 5px;
+    background-color: #f9f9f9;
+}
+
+.note-section {
+    margin: 10px 0;
+}
+
+.note-section h5 {
+    margin: 0 0 5px 0;
+    color: #333;
+}
+
+.note-section p,
+.note-section pre {
+    margin: 0;
+}
+
+.note-section pre {
+    background: #e8e8e8;
+    padding: 10px;
+    border-radius: 3px;
+}
+
+.generate-notes {
+    margin: 20px 0;
+}
+
+.generate-notes button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.generate-notes button:hover {
+    background-color: #0056b3;
+}
+
+.profile-stats,
+.problems-list,
+.notes-list {
+    margin: 20px 0;
+    text-align: left;
+}
+
+.problem,
+.submission {
+    border: 1px solid #ddd;
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 5px;
+}
+
+.notes-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.note-card {
+    border: 1px solid #ddd;
+    padding: 15px;
+    border-radius: 5px;
+    background-color: #f9f9f9;
+    text-decoration: none;
+    color: #333;
+    width: 200px;
+    text-align: center;
+}
+
+.note-card:hover {
+    background-color: #e9e9e9;
+}
+
+.notes-detail {
+    margin: 20px;
+    text-align: left;
+}
+
+.back-link {
+    display: inline-block;
+    margin-bottom: 20px;
+    color: #007bff;
+    text-decoration: none;
+}
+
+.back-link:hover {
+    text-decoration: underline;
+}
+
+.note-content {
+    border: 1px solid #ddd;
+    padding: 20px;
+    border-radius: 5px;
+    background-color: #f9f9f9;
+}
+
+.note-section {
+    margin-bottom: 20px;
+}
+
+.note-section h3 {
+    margin: 0 0 10px 0;
+    color: #333;
+}
+
+.note-section p,
+.note-section pre {
+    margin: 0;
+}
+
+.note-section pre {
+    background: #e8e8e8;
+    padding: 10px;
+    border-radius: 3px;
+}
+
+.problem-card h4 {
+    margin-top: 0;
+}
+
+.profile-stats {
+    margin-bottom: 20px;
+    padding: 15px;
+    background-color: #f5f5f5;
+    border-radius: 5px;
+}
+
+.problems-list {
+    margin-top: 20px;
+}
+
+.problem-card {
+    padding: 15px;
+    margin-bottom: 15px;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.problem-card h4 {
+    margin-top: 0;
+}
+
+.submission {
+    margin-left: 20px;
+    padding: 10px;
+    background-color: #f9f9f9;
+    border-left: 3px solid #1890ff;
+    margin-bottom: 10px;
+}
+
+.view-notes-btn {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 8px 16px;
+    background-color: #1890ff;
+    color: white;
+    text-decoration: none;
+    border-radius: 5px;
+}
+
+.view-notes-btn:hover {
+    background-color: #40a9ff;
+}
+
+.error {
+    color: red;
+    margin: 10px 0;
+
+    .notes-page {
+        padding: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .notes-page h2 {
+        margin-bottom: 20px;
+    }
+
+    .problem-details {
+        padding: 15px;
+        background-color: #f5f5f5;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+
+    .submission {
+        margin-left: 20px;
+        padding: 10px;
+        background-color: #f9f9f9;
+        border-left: 3px solid #1890ff;
+        margin-bottom: 10px;
+    }
+
+    .generate-notes {
+        margin-bottom: 20px;
+    }
+
+    .generate-notes button {
+        padding: 10px 20px;
+        background-color: #1890ff;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    .generate-notes button:hover {
+        background-color: #40a9ff;
+    }
+
+    .generate-notes button:disabled {
+        background-color: #d9d9d9;
+        cursor: not-allowed;
+    }
+
+    .notes-content {
+        padding: 15px;
+        background-color: #fff;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .notes-content pre {
+        background-color: #f5f5f5;
+        padding: 10px;
+        border-radius: 5px;
+        overflow-x: auto;
+    }
+
+    .back-btn {
+        margin-top: 20px;
+        padding: 10px 20px;
+        background-color: #ff4d4f;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    .back-btn:hover {
+        background-color: #d9363e;
+    }
+
+    .error {
+        color: red;
+        margin: 10px 0;
+    }
+}

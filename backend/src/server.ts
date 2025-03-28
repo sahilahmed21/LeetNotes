@@ -16,6 +16,7 @@ app.get("/", (req, res) => {
 
 // Protected API routes
 app.use("/api", authMiddleware, apiRoutes);
+console.log("API routes mounted");
 
 // Start server
 const PORT = process.env.PORT || 3000;

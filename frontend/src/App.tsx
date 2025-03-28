@@ -1,20 +1,17 @@
-// frontend/src/App.tsx
-
 import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Home from "./pages/Home";
+import Notes from "./pages/Notes";
 import "./App.css";
 
 const App: React.FC = () => {
     return (
-        <div className="App">
-            <header>
-                <h1>CodeScribeAI</h1>
-                <p>Your AI-powered LeetCode notes generator</p>
-            </header>
-            <main>
-                <Home />
-            </main>
-        </div>
+        <Router>
+            <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/notes/:problemId" element={<Notes />} />
+            </Routes>
+        </Router>
     );
 };
 

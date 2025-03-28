@@ -2,13 +2,10 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../supabase";
 import Login from "../components/Login";
 import FetchForm from "../components/FetchForm";
-import NotesDisplay from "../components/NotesDisplay";
-import axios from "axios";
-import { Note, LeetCodeData } from "../types";
+import { Link } from "react-router-dom";
 
 const Home: React.FC = () => {
     const [user, setUser] = useState<any>(null);
-    const [notes, setNotes] = useState<Note[]>([]);
     const [profileStats, setProfileStats] = useState<any>(null);
     const [problems, setProblems] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
@@ -17,11 +14,7 @@ const Home: React.FC = () => {
     useEffect(() => {
         const validateAndSetSession = async () => {
             const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-            console.log("Initial Session Data:", sessionData);
-            console.log("Initial Session Error:", sessionError);
-
             if (sessionError || !sessionData.session) {
-                console.warn("No session found. Redirecting to login...");
                 setUser(null);
                 return;
             }
@@ -33,7 +26,6 @@ const Home: React.FC = () => {
         validateAndSetSession();
 
         const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-            console.log("Auth State Changed:", event, session);
             if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
                 setUser(session?.user || null);
                 if (session?.user) {
@@ -41,7 +33,6 @@ const Home: React.FC = () => {
                 }
             } else if (event === "SIGNED_OUT") {
                 setUser(null);
-                setNotes([]);
                 setProfileStats(null);
                 setProblems([]);
             }
@@ -53,6 +44,9 @@ const Home: React.FC = () => {
     }, []);
 
     const fetchUserData = async (userId: string) => {
+        setLoading(true);
+        setError(null);
+
         // Fetch profile stats
         const { data: statsData, error: statsError } = await supabase
             .from("profile_stats")
@@ -62,15 +56,14 @@ const Home: React.FC = () => {
         if (statsError) {
             console.error("Error fetching profile stats:", statsError);
             setError("Failed to fetch profile stats");
+            setLoading(false);
             return;
         }
 
-        // If no profile stats exist, set to null or create a default row
         if (!statsData || statsData.length === 0) {
-            console.log("No profile stats found for user:", userId);
             setProfileStats(null);
         } else {
-            setProfileStats(statsData[0]); // Take the first row if it exists
+            setProfileStats(statsData[0]);
         }
 
         // Fetch problems and submissions
@@ -82,58 +75,16 @@ const Home: React.FC = () => {
         if (problemsError) {
             console.error("Error fetching problems:", problemsError);
             setError("Failed to fetch problems");
+            setLoading(false);
             return;
         }
         setProblems(problemsData || []);
-    };
-
-    const handleGenerateNotes = async () => {
-        if (!user) {
-            setError("No user logged in. Please log in again.");
-            return;
-        }
-
-        setLoading(true);
-        setError(null);
-
-        try {
-            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-            console.log("Generate Notes Session Data:", sessionData);
-            console.log("Generate Notes Session Error:", sessionError);
-
-            if (sessionError || !sessionData.session) {
-                console.error("Session missing during generate notes. Redirecting to login...");
-                setError("Failed to retrieve session. Please log in again.");
-                setUser(null);
-                setLoading(false);
-                return;
-            }
-
-            const token = sessionData.session.access_token;
-
-            const { data } = await axios.post(
-                "http://localhost:3000/api/generate-notes",
-                {},
-                {
-                    headers: {
-                        "x-user-id": user.id,
-                        Authorization: `Bearer ${token}`,
-                    },
-                }
-            );
-            setNotes(data);
-        } catch (err: any) {
-            console.error("Generate notes error:", err);
-            setError(err.response?.data?.error || "Failed to generate notes");
-        } finally {
-            setLoading(false);
-        }
+        setLoading(false);
     };
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
         setUser(null);
-        setNotes([]);
         setProfileStats(null);
         setProblems([]);
     };
@@ -148,13 +99,9 @@ const Home: React.FC = () => {
                         <h2>Welcome, {user.email}</h2>
                         <button onClick={handleLogout}>Logout</button>
                     </div>
-                    <FetchForm userId={user.id} onFetch={handleGenerateNotes} />
-                    <div className="generate-notes">
-                        <button onClick={handleGenerateNotes} disabled={loading}>
-                            {loading ? "Generating..." : "Generate Notes"}
-                        </button>
-                        {error && <p className="error">{error}</p>}
-                    </div>
+                    <FetchForm userId={user.id} onFetch={() => fetchUserData(user.id)} />
+                    {error && <p className="error">{error}</p>}
+                    {loading && <p>Loading...</p>}
                     {profileStats && (
                         <div className="profile-stats">
                             <h3>Profile Stats</h3>
@@ -166,9 +113,9 @@ const Home: React.FC = () => {
                     )}
                     {problems.length > 0 && (
                         <div className="problems-list">
-                            <h3>Problems</h3>
+                            <h3>Your Problems</h3>
                             {problems.map((problem) => (
-                                <div key={problem.id} className="problem">
+                                <div key={problem.id} className="problem-card">
                                     <h4>{problem.title}</h4>
                                     <p><strong>Difficulty:</strong> {problem.difficulty}</p>
                                     <p><strong>Description:</strong> {problem.description}</p>
@@ -183,11 +130,13 @@ const Home: React.FC = () => {
                                             <pre>{submission.code}</pre>
                                         </div>
                                     ))}
+                                    <Link to={`/notes/${problem.id}`} className="view-notes-btn">
+                                        View Notes
+                                    </Link>
                                 </div>
                             ))}
                         </div>
                     )}
-                    <NotesDisplay notes={notes} />
                 </>
             )}
         </div>

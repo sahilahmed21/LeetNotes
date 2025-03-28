@@ -1,5 +1,3 @@
-// frontend/src/types.ts
-
 export interface LeetCodeData {
     username: string;
     profile_stats: {
@@ -27,10 +25,18 @@ export interface Submission {
     runtime: string | null;
     memory: string | null;
     language: string;
-    id: string;
 }
 
 export interface Note {
     title: string;
-    content: string;
+    notes: {
+        topic: string;
+        question: string;
+        intuition: string;
+        example: string;
+        counterexample: string;
+        pseudocode: string;
+        mistake: string;
+        code: string;
+    };
 }

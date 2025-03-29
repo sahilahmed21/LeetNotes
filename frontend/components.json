@@ -1,0 +1,9 @@
+{
+    "style": "default",
+    "rsc": false,
+    "tailwind": true,
+    "aliases": {
+        "components": "src/components",
+        "utils": "src/lib/utils"
+    }
+}

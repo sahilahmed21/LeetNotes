@@ -9,7 +9,6 @@ const NotesDisplay: React.FC<NotesDisplayProps> = ({ notes }) => {
     if (!notes || notes.length === 0) {
         return <p>No notes available. Generate notes to see them here.</p>;
     }
-
     return (
         <div className="notes-display">
             <h3>Generated Notes</h3>

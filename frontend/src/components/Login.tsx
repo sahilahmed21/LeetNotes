@@ -102,7 +102,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                             description: "Your account has been created successfully",
                             variant: "default"
                         });
-                        navigate("/");
+                        navigate("/home");
                     }
 
                     // Optional: Verify session persistence (Original console log)
@@ -149,7 +149,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                         description: "You have successfully logged in",
                         variant: "default",
                     });
-                    navigate("/");
+                    navigate("/home");
                 } else {
                     // Handle case where sign in returns no user and no error
                     setError("Sign in completed but no user data returned.");

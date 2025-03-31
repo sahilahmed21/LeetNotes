@@ -124,7 +124,7 @@ const NotesDetail: React.FC = () => {
         return (
             <div className="container mx-auto p-4 mt-10">
                 {/* Use Button with Link for navigation */}
-                <Button asChild variant="outline" className="mb-4 bg-[#526D82] text-[#DDE6ED] hover:bg-[#27374D] border-[#526D82]">
+                <Button asChild variant="outline" className="mb-4 bg-[#526D82] text-[#3C5B6F] hover:bg-[#27374D] border-[#526D82]">
                     <Link to="/">
                         <ArrowLeft className="mr-2 h-4 w-4" /> Back to Home
                     </Link>

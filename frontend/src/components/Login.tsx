@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { supabase } from "../supabase"; // Keep original Supabase import
+import { useNavigate } from "react-router-dom";
 
 // --- Shadcn/ui Imports from Example ---
 import {
@@ -36,6 +37,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     // --- Add Loading State and Toast Hook from Example ---
     const [loading, setLoading] = useState(false);
     const { toast } = useToast();
+    const navigate = useNavigate();
 
     // --- Keep Original Authentication Logic ---
     const handleAuth = async (e: React.FormEvent) => {
@@ -58,6 +60,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 if (signUpError) {
                     setError(signUpError.message);
                     toast({ title: "Sign Up Error", description: signUpError.message, variant: "destructive" });
+                    setLoading(false); // Added setLoading false here
                     return;
                 }
 
@@ -65,53 +68,41 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     console.log("Sign-up successful, user:", data.user);
                     console.log("Sign-up session:", data.session);
 
-                    // Insert user into the users table (Original)
-                    const { error: dbError } = await supabase.from("users").insert({
-                        id: data.user.id,
-                        username,
-                        email,
-                    });
-
-                    if (dbError) {
-                        setError("DB Error: " + dbError.message);
-                        toast({ title: "Database Error", description: dbError.message, variant: "destructive" });
-                        // Consider how to handle partial success (auth ok, db fail) - maybe delete user? For now, just show error.
-                        return;
-                    }
-
-                    // Create default profile_stats row (Original)
+                    // Keep the profile_stats insert, as the trigger doesn't handle this
                     const { error: statsError } = await supabase.from("profile_stats").insert({
                         user_id: data.user.id,
-                        total_solved: 0, // Ensure defaults are set
+                        total_solved: 0,
                         easy: 0,
                         medium: 0,
                         hard: 0,
-                        last_fetched: null, // Add last_fetched if it exists in your table schema
+                        // last_fetched: null, // Only include if the column exists
                     });
 
                     if (statsError) {
+                        // If this fails, the user exists in auth.users and public.users, but not profile_stats
+                        // You might want to inform the user or log this more carefully.
                         setError("Failed to create profile stats: " + statsError.message);
                         toast({ title: "Stats Creation Error", description: statsError.message, variant: "destructive" });
-                        // Also consider cleanup here
+                        // Decide if you should return or continue
+                        setLoading(false); // Added setLoading false here
                         return;
                     }
 
                     // Check session and notify user (Adapted from original 'message')
                     if (!data.session) {
                         toast({
-                            title: "Sign-up Successful!",
-                            description: "Please check your email to confirm your account, then log in.",
-                            variant: "default", // Or "success" if you have that variant
-                            duration: 7000, // Give user more time to read
+                            title: "Account created",
+                            description: "Please check your email to confirm your account",
+                            variant: "default"
                         });
                     } else {
                         // If session exists immediately (e.g., auto-confirmation enabled), log them in
                         toast({
-                            title: "Account Created!",
-                            description: "Welcome to LeetNotes!", // Use example's app name
-                            variant: "default",
+                            title: "Account created",
+                            description: "Your account has been created successfully",
+                            variant: "default"
                         });
-                        onLogin(data.user); // Call original onLogin prop
+                        navigate("/");
                     }
 
                     // Optional: Verify session persistence (Original console log)
@@ -133,7 +124,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
                 if (signInError) {
                     setError(signInError.message);
-                    toast({ title: "Login Error", description: signInError.message, variant: "destructive" });
+                    toast({ title: "Authentication failed", description: signInError.message, variant: "destructive" });
                     return;
                 }
 
@@ -154,11 +145,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
                     // Call original onLogin prop and show success toast
                     toast({
-                        title: "Welcome Back!",
-                        description: "You have successfully logged in.",
+                        title: "Welcome back",
+                        description: "You have successfully logged in",
                         variant: "default",
                     });
-                    onLogin(data.user);
+                    navigate("/");
                 } else {
                     // Handle case where sign in returns no user and no error
                     setError("Sign in completed but no user data returned.");
@@ -168,7 +159,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         } catch (err: any) { // Add general catch block just in case
             console.error("Unexpected Auth Error:", err);
             setError("An unexpected error occurred.");
-            toast({ title: "Error", description: "An unexpected error occurred during authentication.", variant: "destructive" });
+            toast({ title: "Authentication failed", description: err.message || "An unexpected error occurred", variant: "destructive" });
         } finally {
             setLoading(false); // Set loading false when done
         }
@@ -183,7 +174,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     {/* Use example's title and styling */}
                     <CardTitle className="text-4xl font-bold text-[#27374D]">LeetNotes</CardTitle>
                     {/* Use example's description structure, conditional text */}
-                    <CardDescription>{isSignUp ? "Create your LeetNotes account" : "Sign in to LeetNotes"}</CardDescription>
+                    <CardDescription>{isSignUp ? "Create an account" : "Sign in to your account"}</CardDescription>
                 </CardHeader>
 
                 {/* Use example's error display style, driven by original error state */}
@@ -252,9 +243,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                             ) : // Use original conditional text
                                 isSignUp ? (
-                                    "Sign Up"
+                                    "Sign up"
                                 ) : (
-                                    "Sign In"
+                                    "Sign in"
                                 )}
                         </Button>
                     </form>
@@ -279,7 +270,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 </CardFooter>
             </Card>
             {/* Reminder: Ensure Toaster is rendered in your layout */}
-            {/* <Toaster /> */}
+            <Toaster />
         </div>
     );
 };

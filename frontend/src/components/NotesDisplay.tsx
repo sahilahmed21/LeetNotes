@@ -35,7 +35,7 @@ const NotesDisplay: React.FC<NotesDisplayProps> = ({ notes }) => {
             {/* <h3>Generated Notes</h3> */} {/* Optional: Can keep this heading outside the loop if desired */}
             {notes.map((note, index) => (
                 // Use Card for each note, apply example styling
-                <Card key={note.title || index} className="bg-[#DDE6ED]"> {/* Use original title for key, fallback to index */}
+                <Card key={note.title || index} className="bg-[#3C5B6F]"> {/* Use original title for key, fallback to index */}
                     {/* <CardHeader className="pb-2"> */}
                     {/* Optional: Could place note.title or topic here if needed */}
                     {/* <CardTitle className="text-xl font-semibold text-[#27374D]">{note.notes.topic}</CardTitle> */}

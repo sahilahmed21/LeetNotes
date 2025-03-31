@@ -219,7 +219,7 @@ const Home: React.FC = () => {
                     {loading && !profileStats && (
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                             {[...Array(4)].map((_, i) => (
-                                <Card key={i} className="bg-[#DDE6ED]"><CardContent className="pt-6"><Skeleton className="w-3/4 h-6 mb-2" /><Skeleton className="w-1/2 h-8" /></CardContent></Card>
+                                <Card key={i} className="bg-[#3C5B6F]"><CardContent className="pt-6"><Skeleton className="w-3/4 h-6 mb-2" /><Skeleton className="w-1/2 h-8" /></CardContent></Card>
                             ))}
                         </div>
                     )}
@@ -365,7 +365,7 @@ const Home: React.FC = () => {
                                             {/* Map over original problem.tags, use styled Badge */}
                                             <div className="flex flex-wrap gap-1 mb-2">
                                                 {(problem.tags || []).map((tag, index) => (
-                                                    <Badge key={index} variant="outline" className="text-xs bg-[#526D82] bg-opacity-50 text-[#DDE6ED] border-[#526D82]/60">
+                                                    <Badge key={index} variant="outline" className="text-xs bg-[#526D82] bg-opacity-50 text-[#3C5B6F] border-[#526D82]/60">
                                                         {tag}
                                                     </Badge>
                                                 ))}

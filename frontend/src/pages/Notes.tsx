@@ -315,7 +315,7 @@ const Notes: React.FC = () => {
                                     <CardTitle className="text-2xl font-bold text-[#27374D]">{problem.title}</CardTitle>
                                     {getDifficultyBadge(problem.difficulty)}
                                 </div>
-                                {/* <CardDescription className="text-[#526D82] pt-1">ID: {problem.id}</CardDescription> */}
+                                <CardDescription className="text-[#526D82] pt-1">ID: {problem.id}</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div>
@@ -327,7 +327,7 @@ const Notes: React.FC = () => {
                                     <h3 className="mb-2 text-sm font-medium text-[#526D82] uppercase tracking-wider">Tags</h3>
                                     <div className="flex flex-wrap gap-2">
                                         {(problem.tags || []).map((tag, index) => (
-                                            <Badge key={index} variant="outline" className="text-xs bg-[#526D82] bg-opacity-50 text-[#DDE6ED] border-[#526D82]/60">
+                                            <Badge key={index} variant="outline" className="text-xs bg-[#526D82] bg-opacity-50 text-[#3C5B6F] border-[#526D82]/60">
                                                 {tag}
                                             </Badge>
                                         ))}

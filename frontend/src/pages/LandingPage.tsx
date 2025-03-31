@@ -7,15 +7,37 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs"
 import { Badge } from "../components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
 
+// Define TypeScript interfaces for better type safety
+interface Feature {
+    title: string;
+    description: string;
+    icon: string;
+}
+
+interface CodeSnippet {
+    title: string;
+    code: string;
+}
+
+interface TypewriterEffectProps {
+    text: string;
+    showCursor: boolean;
+}
+
+interface SyntaxHighlightedCodeProps {
+    code: string;
+    showCursor: boolean;
+}
+
 const LandingPage: React.FC = () => {
-    const [isLoaded, setIsLoaded] = useState(false);
-    const [activeFeature, setActiveFeature] = useState("extract");
-    const [codeIndex, setCodeIndex] = useState(0);
-    const [showCursor, setShowCursor] = useState(true);
-    const [isTyping, setIsTyping] = useState(true);
+    const [isLoaded, setIsLoaded] = useState<boolean>(false);
+    const [activeFeature, setActiveFeature] = useState<string>("extract");
+    const [codeIndex, setCodeIndex] = useState<number>(0);
+    const [showCursor, setShowCursor] = useState<boolean>(true);
+    const [isTyping, setIsTyping] = useState<boolean>(true);
     const codeRef = useRef<HTMLDivElement>(null);
 
-    const features = {
+    const features: Record<string, Feature> = {
         extract: {
             title: "Extract",
             description: "Pull your LeetCode submissions automatically with our seamless integration",
@@ -39,7 +61,7 @@ const LandingPage: React.FC = () => {
     };
 
     // Animated code snippets
-    const codeSnippets = [
+    const codeSnippets: CodeSnippet[] = [
         {
             title: "Generate Notes",
             code: `// LeetNotes automatically generates structured notes
@@ -344,12 +366,13 @@ function trackProgress(userData) {
     );
 };
 
-// Typewriter effect component
-const TypewriterEffect = ({ text, showCursor }) => {
-    const [displayText, setDisplayText] = useState("");
-    const [currentIndex, setCurrentIndex] = useState(0);
+// Typewriter effect component - Fixed to properly complete typing animation
+const TypewriterEffect: React.FC<TypewriterEffectProps> = ({ text, showCursor }) => {
+    const [displayText, setDisplayText] = useState<string>("");
+    const [currentIndex, setCurrentIndex] = useState<number>(0);
 
     useEffect(() => {
+        // Reset when text changes
         setDisplayText("");
         setCurrentIndex(0);
     }, [text]);
@@ -359,7 +382,7 @@ const TypewriterEffect = ({ text, showCursor }) => {
             const timer = setTimeout(() => {
                 setDisplayText(prev => prev + text[currentIndex]);
                 setCurrentIndex(prev => prev + 1);
-            }, Math.random() * 30 + 10);
+            }, Math.random() * 30 + 10); // Random typing speed for natural effect
 
             return () => clearTimeout(timer);
         }
@@ -368,21 +391,21 @@ const TypewriterEffect = ({ text, showCursor }) => {
     return (
         <div className="text-[#9DB2BF] whitespace-pre-wrap">
             {displayText}
-            {showCursor && <span className="text-blue-400">|</span>}
+            {showCursor && currentIndex <= text.length && <span className="text-blue-400">|</span>}
         </div>
     );
 };
 
 // Syntax highlighting component
-const SyntaxHighlightedCode = ({ code, showCursor }) => {
+const SyntaxHighlightedCode: React.FC<SyntaxHighlightedCodeProps> = ({ code, showCursor }) => {
     // Very basic syntax highlighting
-    const keywords = ["function", "return", "const", "let", "var", "for", "of", "if", "else", "true", "false"];
-    const functions = ["extractQuestion", "analyzeIntuition", "describeAlgorithm", "identifyMistakes", "formatSolution",
+    const keywords: string[] = ["function", "return", "const", "let", "var", "for", "of", "if", "else", "true", "false"];
+    const functions: string[] = ["extractQuestion", "analyzeIntuition", "describeAlgorithm", "identifyMistakes", "formatSolution",
         "classifyError", "suggestImprovement", "analyzeProblemsCompleted", "identifyStrongestSkills",
         "findAreasForImprovement", "calculateCurrentStreak", "suggestNextProblems", "generateProgressReport"];
 
     const highlightedCode = code.split("\n").map((line, lineIndex) => {
-        let highlightedLine = line;
+        let highlightedLine: React.ReactNode = line;
 
         // Add syntax highlighting classes
         // Comments
@@ -407,7 +430,7 @@ const SyntaxHighlightedCode = ({ code, showCursor }) => {
                             return <span key={tokenIndex} className="text-blue-400">{token}</span>;
                         } else if (token.startsWith('"') || token.startsWith("'")) {
                             return <span key={tokenIndex} className="text-green-400">{token}</span>;
-                        } else if (!isNaN(token) && token.trim() !== '') {
+                        } else if (!isNaN(Number(token)) && token.trim() !== '') {
                             return <span key={tokenIndex} className="text-yellow-400">{token}</span>;
                         } else if (token === '{' || token === '}' || token === '(' || token === ')' || token === ':' || token === ',' || token === ';') {
                             return <span key={tokenIndex} className="text-gray-400">{token}</span>;

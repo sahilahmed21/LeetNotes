@@ -1,0 +1,3 @@
+[submodule "LeetcodeDataFetcher"]
+	path = LeetcodeDataFetcher
+	url = https://github.com/sahilahmed21/LeetcodeDataFetcher

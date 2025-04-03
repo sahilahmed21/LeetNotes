@@ -1,12 +1,12 @@
 {
     "name": "leetnotes-backend",
     "version": "1.0.0",
-    "main": "index.js",
+    "main": "dist/server.js",
     "type": "commonjs",
     "scripts": {
-        "dev": "nodemon --ext ts --exec ts-node src/index.ts",
+        "dev": "nodemon --ext ts --exec ts-node src/server.ts",
         "build": "tsc",
-        "start": "node dist/index.js"
+        "start": "node dist/server.js"
     },
     "dependencies": {
         "@supabase/supabase-js": "^2.49.3",

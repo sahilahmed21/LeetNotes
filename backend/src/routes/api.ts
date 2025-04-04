@@ -18,16 +18,15 @@ router.post("/fetch-data", async (req: AuthRequest, res) => {
 
     // --- FIX: Calculate Python script path dynamically ---
     // This is CRITICAL for Render (or any non-Windows deployment)
-    // Assumes 'fetcher' directory is at the root level, alongside 'backend'
-    const projectRoot = path.join(__dirname, '..', '..', '..'); // Adjust if 'fetcher' is elsewhere relative to 'backend/src/routes'
-    // NOTE: Your original code used 'LeetcodeDataFetcher'. Ensure the directory name matches EXACTLY.
-    // Using 'fetcher' based on common structures. CHANGE 'fetcher' if your directory is named differently.
-    const fetcherDirName = 'fetcher'; // <--- CHANGE THIS if your directory is 'LeetcodeDataFetcher'
+    // Assumes 'LeetcodeDataFetcher' directory is at the root level, alongside 'backend'
+    const projectRoot = path.join(__dirname, '..', '..', '..'); // Navigates from backend/src/routes to project root
+    const fetcherDirName = 'LeetcodeDataFetcher'; // Updated to match your actual directory name
     const fetcherPath = path.join(projectRoot, fetcherDirName, 'main.py');
     const pythonExecutable = 'python'; // Render usually has 'python' aliased to python3
 
     console.log("Calculated Fetcher path:", fetcherPath);
     // --- End Path Fix ---
+
 
     // Quote arguments to handle potential special characters in cookies/tokens
     const command = `${pythonExecutable} "${fetcherPath}" --username "${username}" --session "${session_cookie}" --csrf "${csrf_token}"`;

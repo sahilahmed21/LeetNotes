@@ -57,17 +57,42 @@ const FetchForm: React.FC<FetchFormProps> = ({ userId, onFetch }) => {
 
             const token = sessionData.session.access_token;
 
-            // Original Axios POST request
+            // Get the backend base URL from environment variables
+            const backendUrl = process.env.REACT_APP_BACKEND_URL;
+
+            // Add a check to ensure the environment variable is loaded
+            if (!backendUrl) {
+                console.error("FATAL ERROR: REACT_APP_BACKEND_URL is not defined!");
+                setError("Application configuration error. Backend URL is missing.");
+                setLoading(false);
+                // Optionally use toast here as well
+                toast({
+                    title: "Configuration Error",
+                    description: "Could not find the backend server address.",
+                    variant: "destructive",
+                });
+                return; // Stop the function execution
+            }
+
+            // Construct the full API URL dynamically
+            // Use .replace(/\/$/, '') to remove a potential trailing slash from the env var
+            // before appending the specific endpoint.
+            const apiUrl = `${backendUrl.replace(/\/$/, '')}/api/fetch-data`;
+            console.log("Attempting to fetch data from:", apiUrl); // Log the actual URL being used
+
+            // Updated Axios POST request using the environment variable URL
             const { data } = await axios.post(
-                "http://localhost:3000/api/fetch-data",
+                apiUrl, // Use the dynamically constructed URL
                 credentials,
                 {
                     headers: {
-                        "x-user-id": userId, // Use original userId prop
-                        Authorization: `Bearer ${token}`,
+                        // 'x-user-id': userId, // This header is likely NOT needed if your authMiddleware correctly gets the userId from the token. Removing it simplifies CORS.
+                        Authorization: `Bearer ${token}`, // Keep this header for authentication
+                        'Content-Type': 'application/json' // It's good practice to include this
                     },
                 }
             );
+
 
             // Use toast for success feedback (instead of alert)
             toast({

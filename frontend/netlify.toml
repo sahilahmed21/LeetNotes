@@ -1,0 +1,13 @@
+# netlify.toml
+
+[build]
+  # Optional: You might already have these settings.
+  # command = "npm run build"  # Or yarn build, vite build, etc.
+  # publish = "dist"           # Or build, out, etc. - Make sure this matches your build output directory!
+
+# This is the crucial part for handling React Router refreshes/deep links
+[[redirects]]
+  from = "/*"          # Match any path requested
+  to = "/index.html"  # Serve the main index.html file
+  status = 200        # Important: Use 200 (OK), not 301 (Permanent Redirect)
+                      # This keeps the original URL in the browser for React Router

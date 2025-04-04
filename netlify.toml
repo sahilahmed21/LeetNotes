@@ -1,13 +1,14 @@
-# netlify.toml
+# netlify.toml (Place this file in the ROOT of your repository)
 
 [build]
-  # Optional: You might already have these settings.
-  # command = "npm run build"  # Or yarn build, vite build, etc.
-  # publish = "dist"           # Or build, out, etc. - Make sure this matches your build output directory!
+  # These should match your Netlify UI settings
+  command = "cd frontend && npm install && npm run build"
+  publish = "frontend/build"
+  # Optional: Specify base directory if needed, but usually not required with the cd command
+  # base = "frontend" # Usually not needed if using `cd frontend && ...` in the command
 
-# This is the crucial part for handling React Router refreshes/deep links
+# The crucial redirect rule for SPA routing
 [[redirects]]
-  from = "/*"          # Match any path requested
-  to = "/index.html"  # Serve the main index.html file
-  status = 200        # Important: Use 200 (OK), not 301 (Permanent Redirect)
-                      # This keeps the original URL in the browser for React Router
+  from = "/*"
+  to = "/index.html"
+  status = 200

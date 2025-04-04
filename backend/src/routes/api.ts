@@ -16,32 +16,25 @@ router.post("/fetch-data", async (req: AuthRequest, res) => {
         return res.status(401).json({ error: "User ID not found" });
     }
 
-    // --- FIX: Calculate Python script path dynamically ---
-    // This is CRITICAL for Render (or any non-Windows deployment)
-    // Assumes 'LeetcodeDataFetcher' directory is at the root level, alongside 'backend'
-    const projectRoot = path.join(__dirname, '..', '..', '..'); // Navigates from backend/src/routes to project root
-    const fetcherDirName = 'LeetcodeDataFetcher'; // Updated to match your actual directory name
+    const projectRoot = path.join(__dirname, '..', '..', '..');
+    const fetcherDirName = 'LeetcodeDataFetcher';
     const fetcherPath = path.join(projectRoot, fetcherDirName, 'main.py');
-    const pythonExecutable = 'python'; // Render usually has 'python' aliased to python3
+    const pythonExecutable = 'python';
 
     console.log("Calculated Fetcher path:", fetcherPath);
-    // --- End Path Fix ---
 
-
-    // Quote arguments to handle potential special characters in cookies/tokens
     const command = `${pythonExecutable} "${fetcherPath}" --username "${username}" --session "${session_cookie}" --csrf "${csrf_token}"`;
     console.log("Executing command:", command);
 
     exec(command, async (error, stdout, stderr) => {
-        // Improved error handling from previous suggestions
         if (error) {
             console.error("Execution error:", error);
             const detailMessage = stderr ? `${error.message}\nStderr: ${stderr}` : error.message;
-            // Ensure stderr doesn't expose sensitive info if included in response
             return res.status(500).json({ error: "Failed to execute Python script", details: `Script execution failed. Check server logs. Code: ${error.code}` });
         }
 
         if (stderr) {
+
             console.warn("Script stderr:", stderr);
             // Treat specific errors from stderr as fatal, otherwise might be warnings
             if (stderr.includes("Authentication failed") || stderr.includes("Rate limited") || stderr.includes("Traceback") || stderr.toLowerCase().includes("error:")) {

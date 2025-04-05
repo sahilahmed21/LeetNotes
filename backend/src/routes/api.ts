@@ -132,217 +132,173 @@ router.post("/generate-notes/:problemId", async (req: AuthRequest, res) => {
     const { problemId } = req.params;
     const userId = req.userId;
 
-    console.log(`Received request to generate notes for problemId: ${problemId}, userId: ${userId}`); // Log request start
+    console.log(`Received request to generate notes for problemId: ${problemId}, userId: ${userId}`);
 
-    if (!userId) {
-        console.error("User ID not found in authenticated request.");
-        return res.status(401).json({ error: "User ID not found" });
-    }
-    if (!problemId) {
-        console.error("Problem ID missing from request parameters.");
-        return res.status(400).json({ error: "Problem ID is required" });
-    }
-
-    // Validate problemId looks like a number if necessary (depending on DB schema)
+    // --- Input Validation ---
+    if (!userId) { console.error("User ID not found in authenticated request."); return res.status(401).json({ error: "User ID not found" }); }
+    if (!problemId) { console.error("Problem ID missing from request parameters."); return res.status(400).json({ error: "Problem ID is required" }); }
     const problemIdNum = parseInt(problemId, 10);
-    if (isNaN(problemIdNum)) {
-        console.error(`Invalid non-numeric problem ID received: ${problemId}`);
-        return res.status(400).json({ error: "Invalid Problem ID format" });
-    }
+    if (isNaN(problemIdNum)) { console.error(`Invalid non-numeric problem ID received: ${problemId}`); return res.status(400).json({ error: "Invalid Problem ID format" }); }
+    // --- End Validation ---
 
-    let problemData; // Declare problemData outside the try block
+    let problemData: any;
     try {
         // Step 1: Fetch problem data from Supabase
         console.log(`Fetching problem details from Supabase for problemId: ${problemIdNum}, userId: ${userId}`);
         const { data, error: problemError } = await supabase
             .from("problems")
             .select("*, submissions(*)") // Fetch related submissions
-            .eq("id", problemIdNum)      // Use numeric ID for query if column is integer
+            .eq("id", problemIdNum)
             .eq("user_id", userId)
             .single();
 
         if (problemError) {
             console.error("Supabase error fetching problem:", problemError);
-            if (problemError.code === 'PGRST116') { // Specific code for row not found
-                return res.status(404).json({ error: "Problem not found", details: `Problem with ID ${problemIdNum} not found for this user.` });
-            }
-            // Throw other Supabase errors to be caught by the main catch block
+            if (problemError.code === 'PGRST116') { return res.status(404).json({ error: "Problem not found", details: `Problem with ID ${problemIdNum} not found for this user.` }); }
             throw new Error(`Supabase problem fetch error: ${problemError.message}`);
         }
-
-        if (!data) {
-            // Should be caught by .single() error PGRST116, but double-check
-            console.error(`Problem data unexpectedly null for ID ${problemIdNum} after Supabase query.`);
-            return res.status(404).json({ error: "Problem not found" });
-        }
-        problemData = data; // Assign to outer scope variable
+        if (!data) { throw new Error(`Problem data unexpectedly null for ID ${problemIdNum}`); }
+        problemData = data;
         console.log(`Successfully fetched problem: ${problemData.title}`);
+        // --- End Step 1 ---
 
         // Step 2: Check for Gemini API Key
         if (!process.env.GEMINI_API_KEY) {
             console.error("FATAL: GEMINI_API_KEY environment variable not set on server.");
             return res.status(500).json({ error: "Server configuration error", details: "Missing API key." });
         }
+        // --- End Step 2 ---
 
-        // Step 3: Construct Gemini Prompt
-        console.log("Constructing prompt for Gemini API...");
-        // Limit submission data length in prompt if it's potentially huge
-        const submissionsForPrompt = JSON.stringify(problemData.submissions?.slice(0, 5) || []).substring(0, 2000); // Limit to first 5 & max chars
+        // --- Step 3: Construct Personalized Gemini Prompt ---
+        // (This is the updated prompt section you requested)
+        console.log("Constructing personalized prompt for Gemini API...");
+
+        // --- Prepare Submission Data for Prompt ---
+        const acceptedSubmissions = (problemData.submissions || [])
+            .filter((s: any) => s.status === 'Accepted')
+            .sort((a: any, b: any) => parseInt(b.timestamp || '0', 10) - parseInt(a.timestamp || '0', 10));
+        const latestAcceptedSubmission = acceptedSubmissions.length > 0 ? acceptedSubmissions[0] : null;
+        const submissionSummary = (problemData.submissions || []).slice(0, 3).map((s: any) => ({
+            status: s.status, runtime: s.runtime, memory: s.memory, language: s.language,
+        }));
+        // --- End Submission Data Prep ---
+
+        // *** USING THE PERSONALIZED PROMPT ***
         const prompt = `
-You are tasked with generating structured notes for a specific LeetCode problem. The notes must strictly follow the format below, and the content must be relevant to the given problem titled "${problemData.title}".
+You are an expert LeetCode tutor generating personalized study notes for ME based on MY specific LeetCode problem attempt. The notes must strictly follow the format below and be relevant to the problem titled "${problemData.title}".
 
 Format:
-**Topic:** [Problem Title]
-**Question:** [Problem Description]
-**Intuition:** [Explain the thought process and approach]
-**Example:** [Provide a step-by-step example]
-**Counterexample:** [Provide a case where the solution might fail or edge cases]
-**Pseudocode:** [Provide pseudocode for the solution]
-**Mistake I Did:** [Analyze the submission snippets and identify a potential mistake or area for improvement]
-**Code:** [Provide one concise accepted code snippet, preferably the most recent or fastest]
+**Topic:** [Problem Title - Use the one provided: "${problemData.title}"]
+**Question:** [Problem Description - Use the one provided]
+**Intuition:** [Explain the core logic/approach for solving this problem effectively. Be concise.]
+**Example:** [Provide a clear, concise step-by-step example illustrating the intuition.]
+**Counterexample:** [Provide an edge case or scenario where a naive approach might fail, explaining why.]
+**Pseudocode:** [Provide clear pseudocode for an efficient solution (e.g., the standard optimal approach).]
+**Mistake I Did:** [Analyze MY latest accepted submission details provided below (Code, Runtime, Memory). If no accepted submission is available, analyze the summary of recent attempts. What are potential inefficiencies (time/space complexity) in MY approach compared to the optimal one? Could MY logic be simplified or improved? Are there alternative, more optimal algorithms I could have used for this problem type? If MY accepted solution seems optimal or very well-implemented for its language, state that and briefly explain why it's good (e.g., "Your solution uses the standard two-pointer approach, which is optimal for this problem"). Be constructive.]
+**Code:** [Display MY latest accepted code snippet provided below. Add brief comments (\`// comment\` or \`# comment\`) within the code explaining key parts or highlighting areas for potential improvement discussed in the 'Mistake I Did' section. If no accepted code is available, state "No accepted code submission was provided to analyze.".]
 
-Problem Details:
+Problem Details Provided:
 - Title: ${problemData.title}
 - Description: ${problemData.description}
 - Difficulty: ${problemData.difficulty}
 - Tags: ${Array.isArray(problemData.tags) ? problemData.tags.join(", ") : 'N/A'}
-- Recent Submissions Snippet: ${submissionsForPrompt}
+- My Latest Accepted Submission Details (if available): ${latestAcceptedSubmission ? JSON.stringify({ language: latestAcceptedSubmission.language, runtime: latestAcceptedSubmission.runtime, memory: latestAcceptedSubmission.memory, code: latestAcceptedSubmission.code }).substring(0, 2500) : 'None available.'}
+- Summary of My Recent Attempts: ${JSON.stringify(submissionSummary)}
 
-Ensure the notes are strictly for the problem titled "${problemData.title}". Focus on clarity and conciseness.
+Generate the notes specifically analyzing MY attempt at "${problemData.title}". Ensure the final output strictly follows the specified format headings. Do not add any preamble or closing remarks outside the specified format.
 `;
-        // console.log("Prompt length:", prompt.length); // Optional: log prompt length
+        // --- End Step 3 ---
 
         // Step 4: Call Gemini API
         const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
-        console.log(`Calling Gemini API: ${geminiApiUrl.split('?')[0]}...`); // Log URL without key
-
+        console.log(`Calling Gemini API: ${geminiApiUrl.split('?')[0]}...`);
         let geminiResponse;
         try {
             geminiResponse = await axios.post(
                 geminiApiUrl,
                 { contents: [{ parts: [{ text: prompt }] }] },
-                { headers: { "Content-Type": "application/json" }, timeout: 90000 } // 90 sec timeout
+                { headers: { "Content-Type": "application/json" }, timeout: 90000 }
             );
             console.log("Gemini API call successful.");
         } catch (geminiError: any) {
             console.error("Gemini API request failed:", axios.isAxiosError(geminiError) ? { status: geminiError.response?.status, data: geminiError.response?.data, message: geminiError.message } : geminiError);
-            // Return 502 Bad Gateway if Gemini call itself fails
             return res.status(502).json({ error: "Failed to communicate with AI service.", details: axios.isAxiosError(geminiError) ? `Status ${geminiError.response?.status}` : geminiError.message });
         }
+        // --- End Step 4 ---
 
         // Step 5: Parse Gemini Response
         let generatedText = "";
         try {
-            // Check response structure carefully
             if (geminiResponse.data && geminiResponse.data.candidates && geminiResponse.data.candidates.length > 0) {
                 const candidate = geminiResponse.data.candidates[0];
-                // Check for safety ratings or finish reasons that indicate blocked content
                 if (candidate.finishReason && candidate.finishReason !== 'STOP') {
                     console.warn(`Gemini generation finished with reason: ${candidate.finishReason}`);
-                    // Consider how to handle blocked content, maybe return specific error
-                    if (candidate.finishReason === 'SAFETY') {
-                        console.error("Gemini content blocked due to safety filters.");
-                        return res.status(500).json({ error: "AI generation failed", details: "Content blocked by safety filters." });
-                    }
+                    if (candidate.finishReason === 'SAFETY') { console.error("Gemini content blocked due to safety filters."); return res.status(500).json({ error: "AI generation failed", details: "Content blocked by safety filters." }); }
                 }
-                // Proceed if content seems okay
                 if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0 && candidate.content.parts[0].text) {
                     generatedText = candidate.content.parts[0].text;
                     console.log("Successfully extracted generated text from Gemini response.");
-                    // console.log("Generated Text Snippet:", generatedText.substring(0, 200) + "..."); // Log snippet
-                } else {
-                    throw new Error("Missing 'text' in Gemini response parts structure.");
-                }
-            } else {
-                console.error("Unexpected Gemini API response structure:", JSON.stringify(geminiResponse.data).substring(0, 500));
-                throw new Error("No valid candidates found in Gemini response.");
-            }
-        } catch (parseError: any) {
-            console.error("Error parsing Gemini API response:", parseError);
-            return res.status(500).json({ error: "Failed to parse response from AI service.", details: parseError.message });
-        }
+                } else { throw new Error("Missing 'text' in Gemini response parts structure."); }
+            } else { console.error("Unexpected Gemini API response structure:", JSON.stringify(geminiResponse.data).substring(0, 500)); throw new Error("No valid candidates found in Gemini response."); }
+        } catch (parseError: any) { console.error("Error parsing Gemini API response:", parseError); return res.status(500).json({ error: "Failed to parse response from AI service.", details: parseError.message }); }
+        // --- End Step 5 ---
 
         // Step 6: Parse Generated Text into Sections
         console.log("Parsing generated text into sections...");
         const sections = { topic: "", question: "", intuition: "", example: "", counterexample: "", pseudocode: "", mistake: "", code: "" };
         try {
             const lines = generatedText.split("\n");
-            let currentSectionKey: keyof typeof sections | null = null; // Track current section key
+            let currentSectionKey: keyof typeof sections | null = null;
             let currentContent: string[] = [];
-
-            const sectionMap: { [key: string]: keyof typeof sections } = {
-                "**Topic:**": "topic", "**Question:**": "question", "**Intuition:**": "intuition",
-                "**Example:**": "example", "**Counterexample:**": "counterexample",
-                "**Pseudocode:**": "pseudocode", "**Mistake I Did:**": "mistake", "**Code:**": "code"
-            };
-
+            const sectionMap: { [key: string]: keyof typeof sections } = { "**Topic:**": "topic", "**Question:**": "question", "**Intuition:**": "intuition", "**Example:**": "example", "**Counterexample:**": "counterexample", "**Pseudocode:**": "pseudocode", "**Mistake I Did:**": "mistake", "**Code:**": "code" };
             for (const line of lines) {
                 let markerFound = false;
                 for (const marker in sectionMap) {
                     if (line.startsWith(marker)) {
-                        // Save previous section's content
-                        if (currentSectionKey && sections.hasOwnProperty(currentSectionKey)) {
-                            sections[currentSectionKey] = currentContent.join("\n").trim();
-                        }
-                        // Start new section
-                        currentSectionKey = sectionMap[marker];
-                        currentContent = [line.substring(marker.length).trim()]; // Start new content list
-                        markerFound = true;
-                        break;
+                        if (currentSectionKey && sections.hasOwnProperty(currentSectionKey)) { sections[currentSectionKey] = currentContent.join("\n").trim(); }
+                        currentSectionKey = sectionMap[marker]; currentContent = [line.substring(marker.length).trim()]; markerFound = true; break;
                     }
                 }
-                // If line is not a marker and we are inside a section, append content
-                if (!markerFound && currentSectionKey && line.trim() !== "") {
-                    currentContent.push(line);
-                }
+                if (!markerFound && currentSectionKey && line.trim() !== "") { currentContent.push(line); }
             }
-            // Save the last section's content
-            if (currentSectionKey && sections.hasOwnProperty(currentSectionKey)) {
-                sections[currentSectionKey] = currentContent.join("\n").trim();
-            }
-
-            // Ensure Topic and Question are populated, falling back to problemData if AI missed them
-            if (!sections.topic) sections.topic = problemData.title;
-            if (!sections.question) sections.question = problemData.description; // Maybe summarize description? For now, full.
-
+            if (currentSectionKey && sections.hasOwnProperty(currentSectionKey)) { sections[currentSectionKey] = currentContent.join("\n").trim(); }
+            if (!sections.topic) sections.topic = problemData.title; if (!sections.question) sections.question = problemData.description;
             console.log("Successfully parsed sections.");
-            // console.log("Parsed Sections Data:", sections); // Optional: Log parsed data
+        } catch (parseError: any) { console.error("Error parsing generated text into sections:", parseError); return res.status(500).json({ error: "Failed to structure generated notes.", details: parseError.message }); }
+        // --- End Step 6 ---
 
-        } catch (parseError: any) {
-            console.error("Error parsing generated text into sections:", parseError);
-            // Return 500 but maybe include the raw text for debugging if safe
-            return res.status(500).json({ error: "Failed to structure generated notes.", details: parseError.message });
-        }
-
-        // --- Store or Update Note in Supabase (MODIFIED BLOCK) ---
-        console.log("Attempting to Store/Update note in Supabase...");
+        // --- Step 7: Store or Update Note in Supabase (Using exact logic from your 'correct code' version) ---
+        console.log("Attempting to Store/Update note in Supabase (using provided logic)...");
         try {
             const { data: existingNote, error: fetchNoteError } = await supabase
                 .from("notes")
                 .select("id")
-                .eq("problem_id", problemIdNum)
+                .eq("problem_id", problemIdNum) // Use numeric ID from validation
                 .eq("user_id", userId)
                 .maybeSingle();
 
+            // Handle fetch error (excluding 'not found')
             if (fetchNoteError && fetchNoteError.code !== 'PGRST116') {
                 console.error("Supabase error checking existing note:", fetchNoteError);
                 throw new Error(`Supabase note check error: ${fetchNoteError.message}`);
             }
 
             let noteData;
-            const notePayloadBase = {
+            const notePayloadBase = { // Base object for insert/update
                 user_id: userId,
-                problem_id: problemIdNum,
-                title: sections.topic || problemData.title,
-                notes: sections,
+                problem_id: problemIdNum, // Use numeric ID
+                title: sections.topic || problemData.title, // Use parsed topic or fallback
+                notes: sections, // The structured notes object
             };
 
             if (existingNote) {
+                // UPDATE logic from your 'correct code'
                 console.log(`Updating existing note (ID: ${existingNote.id})`);
                 const updatePayload = {
                     ...notePayloadBase,
-                    updated_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(), // Add updated_at for update
                 };
+                // Remove fields that should not/cannot be updated directly on existing row
                 delete (updatePayload as any).user_id;
                 delete (updatePayload as any).problem_id;
 
@@ -351,7 +307,7 @@ Ensure the notes are strictly for the problem titled "${problemData.title}". Foc
                 const { data, error: updateError } = await supabase
                     .from("notes")
                     .update(updatePayload)
-                    .eq("id", existingNote.id)
+                    .eq("id", existingNote.id) // Match on note's primary key
                     .select()
                     .single();
 
@@ -362,9 +318,11 @@ Ensure the notes are strictly for the problem titled "${problemData.title}". Foc
                 noteData = data;
                 console.log("Note updated successfully.");
             } else {
+                // INSERT logic from your 'correct code'
                 console.log(`Inserting new note for problemId: ${problemIdNum}`);
                 const insertPayload = {
                     ...notePayloadBase,
+                    // updated_at is NOT included here, assuming created_at/updated_at managed by DB default/trigger
                 };
                 console.log("Insert payload:", insertPayload);
 
@@ -382,15 +340,18 @@ Ensure the notes are strictly for the problem titled "${problemData.title}". Foc
                 console.log("Note inserted successfully.");
             }
 
+            // Step 8: Send successful response
             console.log("Sending successful 200 response to client.");
             res.status(200).json(noteData);
-        } catch (supabaseSaveError: any) {
+
+        } catch (supabaseSaveError: any) { // Catch errors specifically from this Supabase block
             console.error("!!! Supabase error during note save/update block:", supabaseSaveError);
+            // Send the specific error message from Supabase if available
             return res.status(500).json({ error: "Failed to store note in database.", details: supabaseSaveError.message });
         }
-        // --- END OF MODIFIED SUPABASE SAVE BLOCK ---
+        // --- END OF SUPABASE SAVE BLOCK ---
 
-    } catch (err: any) {
+    } catch (err: any) { // Outer catch for errors before Supabase save
         console.error("Unhandled error in /generate-notes route (before note save):", err);
         return res.status(500).json({
             error: "Failed to generate notes",

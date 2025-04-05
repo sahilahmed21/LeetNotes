@@ -367,44 +367,46 @@ Ensure the notes are strictly for the problem titled "${problemData.title}". Foc
             return res.status(500).json({ error: "Failed to structure generated notes.", details: parseError.message });
         }
 
-        // Step 7: Store or Update Note in Supabase
-        console.log("Storing/Updating note in Supabase...");
+        // --- Store or Update Note in Supabase (MODIFIED BLOCK) ---
+        console.log("Attempting to Store/Update note in Supabase...");
         try {
             const { data: existingNote, error: fetchNoteError } = await supabase
                 .from("notes")
                 .select("id")
-                .eq("problem_id", problemIdNum) // Use numeric ID
+                .eq("problem_id", problemIdNum)
                 .eq("user_id", userId)
                 .maybeSingle();
 
-            if (fetchNoteError && fetchNoteError.code !== 'PGRST116') { // Ignore not found
+            if (fetchNoteError && fetchNoteError.code !== 'PGRST116') {
                 console.error("Supabase error checking existing note:", fetchNoteError);
-                // Throw to be caught by main handler's catch block
                 throw new Error(`Supabase note check error: ${fetchNoteError.message}`);
             }
 
             let noteData;
-            const notePayload = {
-                // user_id and problem_id are used for filtering/inserting, title/notes/updated_at for content
+            const notePayloadBase = {
                 user_id: userId,
-                problem_id: problemIdNum, // Ensure this matches DB type (using number here)
-                title: sections.topic || problemData.title, // Use parsed topic or fallback
-                notes: sections, // Store the whole parsed sections object
-                updated_at: new Date().toISOString(),
+                problem_id: problemIdNum,
+                title: sections.topic || problemData.title,
+                notes: sections,
             };
-            console.log("Note payload (excluding potential update removals):", notePayload);
-
 
             if (existingNote) {
                 console.log(`Updating existing note (ID: ${existingNote.id})`);
-                // Remove fields that shouldn't change on update
-                const updatePayload = { notes: notePayload.notes, title: notePayload.title, updated_at: notePayload.updated_at };
+                const updatePayload = {
+                    ...notePayloadBase,
+                    updated_at: new Date().toISOString(),
+                };
+                delete (updatePayload as any).user_id;
+                delete (updatePayload as any).problem_id;
+
+                console.log("Update payload:", updatePayload);
+
                 const { data, error: updateError } = await supabase
                     .from("notes")
                     .update(updatePayload)
                     .eq("id", existingNote.id)
-                    .select() // Select the updated row
-                    .single(); // Expect one row back
+                    .select()
+                    .single();
 
                 if (updateError) {
                     console.error("Supabase error updating note:", updateError);
@@ -414,13 +416,16 @@ Ensure the notes are strictly for the problem titled "${problemData.title}". Foc
                 console.log("Note updated successfully.");
             } else {
                 console.log(`Inserting new note for problemId: ${problemIdNum}`);
-                // updated_at might be handled by DB default - remove if necessary
-                // delete (notePayload as any).updated_at;
+                const insertPayload = {
+                    ...notePayloadBase,
+                };
+                console.log("Insert payload:", insertPayload);
+
                 const { data, error: insertError } = await supabase
                     .from("notes")
-                    .insert(notePayload)
-                    .select() // Select the inserted row
-                    .single(); // Expect one row back
+                    .insert(insertPayload)
+                    .select()
+                    .single();
 
                 if (insertError) {
                     console.error("Supabase error inserting note:", insertError);
@@ -430,19 +435,16 @@ Ensure the notes are strictly for the problem titled "${problemData.title}". Foc
                 console.log("Note inserted successfully.");
             }
 
-            // Step 8: Send successful response
-            console.log("Sending successful response to client.");
-            res.status(200).json(noteData); // Use 200 OK for successful update/insert
-
-        } catch (supabaseError: any) {
-            // Catch errors specifically from the Supabase save block
-            console.error("Supabase error during note save/update:", supabaseError);
-            return res.status(500).json({ error: "Failed to store note in database.", details: supabaseError.message });
+            console.log("Sending successful 200 response to client.");
+            res.status(200).json(noteData);
+        } catch (supabaseSaveError: any) {
+            console.error("!!! Supabase error during note save/update block:", supabaseSaveError);
+            return res.status(500).json({ error: "Failed to store note in database.", details: supabaseSaveError.message });
         }
+        // --- END OF MODIFIED SUPABASE SAVE BLOCK ---
 
     } catch (err: any) {
-        // Catch errors from the main try block (e.g., Supabase problem fetch, unhandled Gemini errors)
-        console.error("Unhandled error in /generate-notes route:", err);
+        console.error("Unhandled error in /generate-notes route (before note save):", err);
         return res.status(500).json({
             error: "Failed to generate notes",
             details: err.message || "An unexpected server error occurred.",

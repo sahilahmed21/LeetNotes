@@ -1,13 +1,14 @@
+// backend/src/routes/api.ts
 import { Router } from "express";
 import { exec } from "child_process";
 import axios from "axios";
-import path from 'path'; // <-- Import path module
+import path from 'path';
 import { supabase } from "../supabase";
 import { AuthRequest } from "../middleware/auth";
 
 const router = Router();
 
-// Fetch LeetCode data and store in Supabase
+// --- /fetch-data route (Keep as is - already fixed) ---
 router.post("/fetch-data", async (req: AuthRequest, res) => {
     const { username, session_cookie, csrf_token } = req.body;
     const userId = req.userId;
@@ -16,59 +17,55 @@ router.post("/fetch-data", async (req: AuthRequest, res) => {
         return res.status(401).json({ error: "User ID not found" });
     }
 
-    // --- FIX: Calculate Python script path dynamically ---
-    const projectRoot = path.join(__dirname, '..', '..', '..'); // Navigates from backend/src/routes to project root
-    const fetcherDirName = 'LeetcodeDataFetcher'; // Updated to match your actual directory name
+    const projectRoot = path.join(__dirname, '..', '..', '..');
+    const fetcherDirName = 'LeetcodeDataFetcher';
     const fetcherPath = path.join(projectRoot, fetcherDirName, 'main.py');
-    const pythonExecutable = 'python'; // Render usually has 'python' aliased to python3
+    const pythonExecutable = 'python';
 
     console.log("Calculated Fetcher path:", fetcherPath);
-    // --- End Path Fix ---
 
-
-    // Quote arguments to handle potential special characters in cookies/tokens
     const command = `${pythonExecutable} "${fetcherPath}" --username "${username}" --session "${session_cookie}" --csrf "${csrf_token}"`;
     console.log("Executing command:", command);
 
     exec(command, async (error, stdout, stderr) => {
-        // Improved error handling
         if (error) {
-            console.error("Execution error:", error);
+            console.error("Execution error:", { message: error.message, code: error.code, cmd: error.cmd });
             const detailMessage = stderr ? `${error.message}\nStderr: ${stderr}` : error.message;
             return res.status(500).json({ error: "Failed to execute Python script", details: `Script execution failed. Check server logs. Code: ${error.code}` });
         }
 
         if (stderr) {
             console.warn("Script stderr:", stderr);
+            // Treat specific errors from stderr as fatal
             if (stderr.includes("Authentication failed") || stderr.includes("Rate limited") || stderr.includes("Traceback") || stderr.toLowerCase().includes("error:")) {
+                console.error("Python script reported critical error via stderr.");
                 return res.status(500).json({
                     error: "Python script reported an error",
-                    details: "Error during data fetching. Check server logs.",
+                    details: "Error during data fetching. Check server logs for Python script errors.",
                 });
             }
         }
 
         if (!stdout || stdout.trim() === "") {
-            console.error("Python script produced empty stdout.");
-            const detailMessage = stderr ? `Script finished with no output. Stderr: ${stderr}` : "Script finished with no output.";
+            console.error("Python script produced empty stdout. Stderr:", stderr || '(empty)');
             return res.status(500).json({ error: "Python script did not produce expected data", details: "Fetcher script returned no data. Check server logs." });
         }
 
         try {
             const data = JSON.parse(stdout);
-            // Limit logging in production if data is large
-            console.log("Parsed data from Python script:", JSON.stringify(data, null, 2).substring(0, 500) + '...');
+            // Log only structure or small part in production
+            // console.log("Parsed data from Python script:", JSON.stringify(data, null, 2).substring(0, 500) + '...');
 
-            // --- Supabase Logic ---
+            // --- Supabase Logic (Keep as is) ---
             const { error: statsError } = await supabase
                 .from("profile_stats")
                 .upsert(
                     {
                         user_id: userId,
-                        total_solved: data.profile_stats.total_solved || 0,
-                        easy: data.profile_stats.easy || 0,
-                        medium: data.profile_stats.medium || 0,
-                        hard: data.profile_stats.hard || 0,
+                        total_solved: data.profile_stats?.total_solved || 0, // Add safe navigation
+                        easy: data.profile_stats?.easy || 0,
+                        medium: data.profile_stats?.medium || 0,
+                        hard: data.profile_stats?.hard || 0,
                     },
                     { onConflict: "user_id" }
                 );
@@ -78,309 +75,377 @@ router.post("/fetch-data", async (req: AuthRequest, res) => {
             }
 
             for (const problem of data.problems || []) {
-                const { data: problemData, error: problemError } = await supabase
-                    .from("problems")
-                    .insert({ // Consider upsert on (user_id, slug) if problems can be re-fetched
-                        user_id: userId,
-                        title: problem.title,
-                        difficulty: problem.difficulty,
-                        description: problem.description,
-                        tags: problem.tags,
-                        slug: problem.slug,
-                    })
-                    .select("id")
-                    .single();
+                // Fetch existing problem ID if it violates unique constraint on insert
+                let problemId: number | string | null = null;
+                let problemDataResult;
 
-                if (problemError) {
-                    if (problemError.code === '23505') {
-                        console.warn(`Problem insert skipped (likely exists): ${problem.slug} for user ${userId}`);
-                        // If you need the ID for submissions, query it here based on user_id and slug
-                        // For simplicity, skipping submissions if problem insert fails/is skipped due to conflict
-                        continue;
+                try {
+                    problemDataResult = await supabase
+                        .from("problems")
+                        .insert({
+                            user_id: userId,
+                            title: problem.title,
+                            difficulty: problem.difficulty,
+                            description: problem.description,
+                            tags: problem.tags,
+                            slug: problem.slug,
+                        })
+                        .select("id")
+                        .single();
+
+                    if (problemDataResult.error) throw problemDataResult.error; // Throw error to be caught below
+                    if (problemDataResult.data) problemId = problemDataResult.data.id;
+
+                } catch (problemInsertError: any) {
+                    if (problemInsertError.code === '23505') { // Unique violation (user_id, slug likely)
+                        console.warn(`Problem insert skipped (conflict): ${problem.slug} for user ${userId}. Querying existing.`);
+                        const { data: existingProblemData, error: queryError } = await supabase
+                            .from("problems")
+                            .select("id")
+                            .eq("user_id", userId)
+                            .eq("slug", problem.slug)
+                            .single();
+
+                        if (queryError) {
+                            console.error(`Error querying existing problem ${problem.slug}:`, queryError);
+                            continue; // Skip submissions if we can't get problem ID
+                        }
+                        if (existingProblemData) {
+                            problemId = existingProblemData.id;
+                        } else {
+                            console.error(`Conflict on insert but failed to query existing problem ${problem.slug}. Skipping submissions.`);
+                            continue; // Skip submissions
+                        }
+                    } else {
+                        console.error(`Problem insert error for ${problem.slug}:`, problemInsertError);
+                        // Decide whether to continue or return error
+                        // return res.status(500).json({ error: "Failed to store problem", details: problemInsertError.message });
+                        continue; // Let's try to continue with other problems
                     }
-                    console.error("Problem insert error:", problemError);
-                    // If one problem fails, maybe continue with others? For now, returning error.
-                    return res.status(500).json({ error: "Failed to store problem", details: problemError.message });
                 }
 
-                if (!problemData) {
-                    console.warn(`Skipping submissions for problem ${problem.slug} as problem data/ID was not retrieved.`);
-                    continue; // Skip submissions if problem insert didn't return an ID
+
+                if (!problemId) {
+                    console.warn(`Could not get problem ID for ${problem.slug}. Skipping submissions.`);
+                    continue; // Skip submissions if problem ID wasn't obtained
                 }
 
-                const problemId = problemData.id;
                 for (const submission of problem.submissions || []) {
-                    // --- Check if submission_id exists ---
                     if (!submission.submission_id) {
                         console.warn(`Submission object missing 'submission_id' for problem ${problem.slug}. Skipping insert.`);
-                        continue; // Skip this specific submission if its ID is missing
+                        continue;
                     }
-                    // --- End Check ---
 
-                    const { error: submissionError } = await supabase
-                        .from("submissions")
-                        .insert({ // Consider upsert on (user_id, submission_id)
-                            problem_id: problemId,
-                            user_id: userId,
-                            status: submission.status,
-                            // Convert Unix timestamp string from Python to ISO string for Supabase
-                            timestamp: submission.timestamp ? new Date(parseInt(submission.timestamp, 10) * 1000).toISOString() : new Date().toISOString(),
-                            runtime: submission.runtime,
-                            memory: submission.memory,
-                            language: submission.language,
-                            // ***** THIS LINE WAS THE FIX *****
-                            submission_id: submission.submission_id, // Use submission.submission_id
-                            // *****-----------------------*****
-                            code: submission.code,
-                        });
+                    try {
+                        const { error: submissionError } = await supabase
+                            .from("submissions")
+                            .insert({
+                                problem_id: problemId,
+                                user_id: userId,
+                                status: submission.status,
+                                timestamp: submission.timestamp ? new Date(parseInt(submission.timestamp, 10) * 1000).toISOString() : new Date().toISOString(),
+                                runtime: submission.runtime,
+                                memory: submission.memory,
+                                language: submission.language,
+                                submission_id: submission.submission_id, // Correct key
+                                code: submission.code,
+                            }); // Consider adding .select() if needed
 
-                    if (submissionError) {
-                        if (submissionError.code === '23505') {
-                            console.warn(`Submission insert skipped (likely exists): ${submission.submission_id}`);
-                            continue;
+                        if (submissionError) throw submissionError; // Throw to be caught
+
+                    } catch (submissionInsertError: any) {
+                        if (submissionInsertError.code === '23505') { // Unique violation (submission_id likely)
+                            console.warn(`Submission insert skipped (conflict): ${submission.submission_id}`);
+                        } else {
+                            console.error(`Submission insert error for ${submission.submission_id}:`, submissionInsertError);
+                            // Decide whether to continue or return error for this problem's submissions
+                            // For now, log and continue with the next submission
                         }
-                        console.error("Submission insert error:", submissionError);
-                        // If one submission fails, maybe continue with others? For now, returning error.
-                        return res.status(500).json({ error: "Failed to store submission", details: submissionError.message });
+                        continue; // Continue to next submission on error
                     }
                 }
             }
             // --- End Supabase Logic ---
 
-            res.json({ message: "Data fetched and stored in Supabase" });
-        } catch (parseError) {
-            console.error("Parse error:", parseError);
-            console.error("Raw stdout that failed parsing:", stdout);
+            res.json({ message: "Data fetched and stored successfully." }); // Updated message
+        } catch (parseError: any) {
+            console.error("JSON Parse error:", parseError);
+            console.error("Raw stdout that failed parsing:", stdout); // Log raw output
             return res.status(500).json({
-                error: "Invalid data format from fetcher",
-                details: "Failed to process data from fetcher script.",
+                error: "Invalid data format from fetcher script",
+                details: "Failed to process data from fetcher script. Check server logs.",
             });
         }
     });
 });
 
-// --- Generate Notes Route (No changes needed here) ---
+
+// --- Generate Notes Route (Refined Error Handling & Logging) ---
 router.post("/generate-notes/:problemId", async (req: AuthRequest, res) => {
     const { problemId } = req.params;
     const userId = req.userId;
 
+    console.log(`Received request to generate notes for problemId: ${problemId}, userId: ${userId}`); // Log request start
+
     if (!userId) {
+        console.error("User ID not found in authenticated request.");
         return res.status(401).json({ error: "User ID not found" });
     }
     if (!problemId) {
+        console.error("Problem ID missing from request parameters.");
         return res.status(400).json({ error: "Problem ID is required" });
     }
 
-    // Fetch the specific problem and its submissions
-    const { data: problemData, error: problemError } = await supabase
-        .from("problems")
-        .select("*, submissions(*)")
-        .eq("id", problemId)
-        .eq("user_id", userId)
-        .single();
-
-    if (problemError || !problemData) {
-        console.error("Error fetching problem:", problemError);
-        return res.status(404).json({ error: "Problem not found", details: problemError?.message });
+    // Validate problemId looks like a number if necessary (depending on DB schema)
+    const problemIdNum = parseInt(problemId, 10);
+    if (isNaN(problemIdNum)) {
+        console.error(`Invalid non-numeric problem ID received: ${problemId}`);
+        return res.status(400).json({ error: "Invalid Problem ID format" });
     }
 
+    let problemData; // Declare problemData outside the try block
     try {
-        console.log(`Processing problem: ${problemData.title}`);
+        // Step 1: Fetch problem data from Supabase
+        console.log(`Fetching problem details from Supabase for problemId: ${problemIdNum}, userId: ${userId}`);
+        const { data, error: problemError } = await supabase
+            .from("problems")
+            .select("*, submissions(*)") // Fetch related submissions
+            .eq("id", problemIdNum)      // Use numeric ID for query if column is integer
+            .eq("user_id", userId)
+            .single();
 
-        if (!process.env.GEMINI_API_KEY) {
-            console.error("GEMINI_API_KEY environment variable not set.");
-            return res.status(500).json({ error: "Server configuration error: Missing API key." });
+        if (problemError) {
+            console.error("Supabase error fetching problem:", problemError);
+            if (problemError.code === 'PGRST116') { // Specific code for row not found
+                return res.status(404).json({ error: "Problem not found", details: `Problem with ID ${problemIdNum} not found for this user.` });
+            }
+            // Throw other Supabase errors to be caught by the main catch block
+            throw new Error(`Supabase problem fetch error: ${problemError.message}`);
         }
+
+        if (!data) {
+            // Should be caught by .single() error PGRST116, but double-check
+            console.error(`Problem data unexpectedly null for ID ${problemIdNum} after Supabase query.`);
+            return res.status(404).json({ error: "Problem not found" });
+        }
+        problemData = data; // Assign to outer scope variable
+        console.log(`Successfully fetched problem: ${problemData.title}`);
+
+        // Step 2: Check for Gemini API Key
+        if (!process.env.GEMINI_API_KEY) {
+            console.error("FATAL: GEMINI_API_KEY environment variable not set on server.");
+            return res.status(500).json({ error: "Server configuration error", details: "Missing API key." });
+        }
+
+        // Step 3: Construct Gemini Prompt
+        console.log("Constructing prompt for Gemini API...");
+        // Limit submission data length in prompt if it's potentially huge
+        const submissionsForPrompt = JSON.stringify(problemData.submissions?.slice(0, 5) || []).substring(0, 2000); // Limit to first 5 & max chars
         const prompt = `
-You are tasked with generating structured notes for a specific LeetCode problem. The notes must strictly follow the format below, and the content must be relevant to the given problem. Do not generate notes for a different problem. If the problem details are unclear, use the title and description to infer the problem, but ensure the notes match the problem provided.
+You are tasked with generating structured notes for a specific LeetCode problem. The notes must strictly follow the format below, and the content must be relevant to the given problem titled "${problemData.title}".
 
 Format:
 **Topic:** [Problem Title]
 **Question:** [Problem Description]
 **Intuition:** [Explain the thought process and approach]
 **Example:** [Provide a step-by-step example]
-**Counterexample:** [Provide a case where the solution fails or is impossible]
+**Counterexample:** [Provide a case where the solution might fail or edge cases]
 **Pseudocode:** [Provide pseudocode for the solution]
-**Mistake I Did:** [Analyze the submission and identify a potential mistake]
-**Code:** [Provide the accepted code]
+**Mistake I Did:** [Analyze the submission snippets and identify a potential mistake or area for improvement]
+**Code:** [Provide one concise accepted code snippet, preferably the most recent or fastest]
 
 Problem Details:
 - Title: ${problemData.title}
 - Description: ${problemData.description}
 - Difficulty: ${problemData.difficulty}
 - Tags: ${Array.isArray(problemData.tags) ? problemData.tags.join(", ") : 'N/A'}
-- Submissions: ${JSON.stringify(problemData.submissions)}
+- Recent Submissions Snippet: ${submissionsForPrompt}
 
-Ensure that the notes are generated for the problem titled "${problemData.title}" and match the description provided. Do not generate notes for a different problem.
+Ensure the notes are strictly for the problem titled "${problemData.title}". Focus on clarity and conciseness.
 `;
+        // console.log("Prompt length:", prompt.length); // Optional: log prompt length
 
-        const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`; // Using 1.5 Flash
-        console.log("Calling Gemini API...");
+        // Step 4: Call Gemini API
+        const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+        console.log(`Calling Gemini API: ${geminiApiUrl.split('?')[0]}...`); // Log URL without key
 
-        let response;
+        let geminiResponse;
         try {
-            response = await axios.post(
+            geminiResponse = await axios.post(
                 geminiApiUrl,
-                {
-                    contents: [
-                        {
-                            parts: [{ text: prompt }],
-                        },
-                    ],
-                    // Optional: Add generationConfig if needed
-                    // generationConfig: {
-                    //     temperature: 0.7,
-                    //     topK: 1,
-                    //     topP: 1,
-                    //     maxOutputTokens: 2048,
-                    // },
-                },
-                {
-                    headers: { "Content-Type": "application/json" },
-                    timeout: 60000
-                }
+                { contents: [{ parts: [{ text: prompt }] }] },
+                { headers: { "Content-Type": "application/json" }, timeout: 90000 } // 90 sec timeout
             );
+            console.log("Gemini API call successful.");
         } catch (geminiError: any) {
-            console.error("Gemini API request failed:", geminiError.response?.data || geminiError.message);
-            return res.status(502).json({ error: "Failed to communicate with AI service." });
+            console.error("Gemini API request failed:", axios.isAxiosError(geminiError) ? { status: geminiError.response?.status, data: geminiError.response?.data, message: geminiError.message } : geminiError);
+            // Return 502 Bad Gateway if Gemini call itself fails
+            return res.status(502).json({ error: "Failed to communicate with AI service.", details: axios.isAxiosError(geminiError) ? `Status ${geminiError.response?.status}` : geminiError.message });
         }
 
+        // Step 5: Parse Gemini Response
         let generatedText = "";
         try {
-            // Updated structure check for Gemini 1.5 Flash
-            if (response.data && response.data.candidates && response.data.candidates.length > 0 &&
-                response.data.candidates[0].content && response.data.candidates[0].content.parts &&
-                response.data.candidates[0].content.parts.length > 0 && response.data.candidates[0].content.parts[0].text) {
-                generatedText = response.data.candidates[0].content.parts[0].text;
-                console.log("Generated text from Gemini API received.");
+            // Check response structure carefully
+            if (geminiResponse.data && geminiResponse.data.candidates && geminiResponse.data.candidates.length > 0) {
+                const candidate = geminiResponse.data.candidates[0];
+                // Check for safety ratings or finish reasons that indicate blocked content
+                if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+                    console.warn(`Gemini generation finished with reason: ${candidate.finishReason}`);
+                    // Consider how to handle blocked content, maybe return specific error
+                    if (candidate.finishReason === 'SAFETY') {
+                        console.error("Gemini content blocked due to safety filters.");
+                        return res.status(500).json({ error: "AI generation failed", details: "Content blocked by safety filters." });
+                    }
+                }
+                // Proceed if content seems okay
+                if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0 && candidate.content.parts[0].text) {
+                    generatedText = candidate.content.parts[0].text;
+                    console.log("Successfully extracted generated text from Gemini response.");
+                    // console.log("Generated Text Snippet:", generatedText.substring(0, 200) + "..."); // Log snippet
+                } else {
+                    throw new Error("Missing 'text' in Gemini response parts structure.");
+                }
             } else {
-                console.error("Unexpected Gemini API response structure:", response.data);
-                throw new Error("Unexpected response format from AI service.");
+                console.error("Unexpected Gemini API response structure:", JSON.stringify(geminiResponse.data).substring(0, 500));
+                throw new Error("No valid candidates found in Gemini response.");
             }
-
-        } catch (parseError) {
+        } catch (parseError: any) {
             console.error("Error parsing Gemini API response:", parseError);
-            return res.status(500).json({ error: "Failed to parse response from AI service." });
+            return res.status(500).json({ error: "Failed to parse response from AI service.", details: parseError.message });
         }
 
-        // Parse the generated text into structured sections
-        const sections = { topic: problemData.title, question: problemData.description, intuition: "", example: "", counterexample: "", pseudocode: "", mistake: "", code: "" };
+        // Step 6: Parse Generated Text into Sections
+        console.log("Parsing generated text into sections...");
+        const sections = { topic: "", question: "", intuition: "", example: "", counterexample: "", pseudocode: "", mistake: "", code: "" };
         try {
             const lines = generatedText.split("\n");
-            let currentSection: keyof typeof sections | "" = "";
+            let currentSectionKey: keyof typeof sections | null = null; // Track current section key
             let currentContent: string[] = [];
 
             const sectionMap: { [key: string]: keyof typeof sections } = {
-                "**Topic:**": "topic",
-                "**Question:**": "question",
-                "**Intuition:**": "intuition",
-                "**Example:**": "example",
-                "**Counterexample:**": "counterexample",
-                "**Pseudocode:**": "pseudocode",
-                "**Mistake I Did:**": "mistake",
-                "**Code:**": "code"
+                "**Topic:**": "topic", "**Question:**": "question", "**Intuition:**": "intuition",
+                "**Example:**": "example", "**Counterexample:**": "counterexample",
+                "**Pseudocode:**": "pseudocode", "**Mistake I Did:**": "mistake", "**Code:**": "code"
             };
 
             for (const line of lines) {
-                let matched = false;
+                let markerFound = false;
                 for (const marker in sectionMap) {
                     if (line.startsWith(marker)) {
-                        if (currentSection && currentContent.length > 0) {
-                            // Only assign if the section exists in our structure
-                            if (sections.hasOwnProperty(currentSection)) {
-                                sections[currentSection] = currentContent.join("\n").trim();
-                            }
+                        // Save previous section's content
+                        if (currentSectionKey && sections.hasOwnProperty(currentSectionKey)) {
+                            sections[currentSectionKey] = currentContent.join("\n").trim();
                         }
-                        currentSection = sectionMap[marker];
-                        currentContent = [line.substring(marker.length).trim()];
-                        matched = true;
+                        // Start new section
+                        currentSectionKey = sectionMap[marker];
+                        currentContent = [line.substring(marker.length).trim()]; // Start new content list
+                        markerFound = true;
                         break;
                     }
                 }
-                if (!matched && currentSection && line.trim() !== "") {
+                // If line is not a marker and we are inside a section, append content
+                if (!markerFound && currentSectionKey && line.trim() !== "") {
                     currentContent.push(line);
                 }
             }
-            // Add the last section's content
-            if (currentSection && sections.hasOwnProperty(currentSection) && currentContent.length > 0) {
-                sections[currentSection] = currentContent.join("\n").trim();
+            // Save the last section's content
+            if (currentSectionKey && sections.hasOwnProperty(currentSectionKey)) {
+                sections[currentSectionKey] = currentContent.join("\n").trim();
             }
-        } catch (parseError) {
+
+            // Ensure Topic and Question are populated, falling back to problemData if AI missed them
+            if (!sections.topic) sections.topic = problemData.title;
+            if (!sections.question) sections.question = problemData.description; // Maybe summarize description? For now, full.
+
+            console.log("Successfully parsed sections.");
+            // console.log("Parsed Sections Data:", sections); // Optional: Log parsed data
+
+        } catch (parseError: any) {
             console.error("Error parsing generated text into sections:", parseError);
-            return res.status(500).json({ error: "Failed to structure generated notes." });
+            // Return 500 but maybe include the raw text for debugging if safe
+            return res.status(500).json({ error: "Failed to structure generated notes.", details: parseError.message });
         }
 
-        console.log("Parsed sections generated.");
-
-        // Store or update the note in Supabase
+        // Step 7: Store or Update Note in Supabase
+        console.log("Storing/Updating note in Supabase...");
         try {
             const { data: existingNote, error: fetchNoteError } = await supabase
                 .from("notes")
                 .select("id")
-                .eq("problem_id", problemId)
+                .eq("problem_id", problemIdNum) // Use numeric ID
                 .eq("user_id", userId)
                 .maybeSingle();
 
-            if (fetchNoteError && fetchNoteError.code !== 'PGRST116') {
-                console.error("Error checking existing note:", fetchNoteError);
-                throw new Error("Failed to check existing note");
+            if (fetchNoteError && fetchNoteError.code !== 'PGRST116') { // Ignore not found
+                console.error("Supabase error checking existing note:", fetchNoteError);
+                // Throw to be caught by main handler's catch block
+                throw new Error(`Supabase note check error: ${fetchNoteError.message}`);
             }
 
             let noteData;
             const notePayload = {
+                // user_id and problem_id are used for filtering/inserting, title/notes/updated_at for content
                 user_id: userId,
-                problem_id: parseInt(problemId, 10),
-                title: problemData.title, // Use title from fetched problemData
-                notes: sections, // Store the parsed sections object
+                problem_id: problemIdNum, // Ensure this matches DB type (using number here)
+                title: sections.topic || problemData.title, // Use parsed topic or fallback
+                notes: sections, // Store the whole parsed sections object
                 updated_at: new Date().toISOString(),
             };
+            console.log("Note payload (excluding potential update removals):", notePayload);
+
 
             if (existingNote) {
-                // Update existing note
-                delete (notePayload as any).title; // Don't update title on existing notes usually
-                delete (notePayload as any).problem_id; // Don't update foreign key
-                delete (notePayload as any).user_id; // Don't update user_id
+                console.log(`Updating existing note (ID: ${existingNote.id})`);
+                // Remove fields that shouldn't change on update
+                const updatePayload = { notes: notePayload.notes, title: notePayload.title, updated_at: notePayload.updated_at };
                 const { data, error: updateError } = await supabase
                     .from("notes")
-                    .update(notePayload)
+                    .update(updatePayload)
                     .eq("id", existingNote.id)
-                    .select()
-                    .single();
+                    .select() // Select the updated row
+                    .single(); // Expect one row back
 
                 if (updateError) {
-                    console.error("Error updating note in Supabase:", updateError);
-                    throw new Error("Failed to update note in Supabase");
+                    console.error("Supabase error updating note:", updateError);
+                    throw new Error(`Supabase note update error: ${updateError.message}`);
                 }
                 noteData = data;
                 console.log("Note updated successfully.");
             } else {
-                // Insert new note
-                // updated_at might be handled by DB default, remove if so
+                console.log(`Inserting new note for problemId: ${problemIdNum}`);
+                // updated_at might be handled by DB default - remove if necessary
                 // delete (notePayload as any).updated_at;
                 const { data, error: insertError } = await supabase
                     .from("notes")
                     .insert(notePayload)
-                    .select()
-                    .single();
+                    .select() // Select the inserted row
+                    .single(); // Expect one row back
 
                 if (insertError) {
-                    console.error("Error inserting note in Supabase:", insertError);
-                    throw new Error("Failed to insert note in Supabase");
+                    console.error("Supabase error inserting note:", insertError);
+                    throw new Error(`Supabase note insert error: ${insertError.message}`);
                 }
                 noteData = data;
                 console.log("Note inserted successfully.");
             }
 
-            res.json(noteData); // Send back the created/updated note
-        } catch (supabaseError) {
-            console.error("Supabase error during note save:", supabaseError);
-            return res.status(500).json({ error: "Failed to store note in database." });
+            // Step 8: Send successful response
+            console.log("Sending successful response to client.");
+            res.status(200).json(noteData); // Use 200 OK for successful update/insert
+
+        } catch (supabaseError: any) {
+            // Catch errors specifically from the Supabase save block
+            console.error("Supabase error during note save/update:", supabaseError);
+            return res.status(500).json({ error: "Failed to store note in database.", details: supabaseError.message });
         }
+
     } catch (err: any) {
-        console.error("Generate notes route error:", err);
+        // Catch errors from the main try block (e.g., Supabase problem fetch, unhandled Gemini errors)
+        console.error("Unhandled error in /generate-notes route:", err);
         return res.status(500).json({
             error: "Failed to generate notes",
-            details: err.message || "An unexpected error occurred.",
+            details: err.message || "An unexpected server error occurred.",
         });
     }
 });

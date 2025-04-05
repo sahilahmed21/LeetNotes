@@ -1,57 +1,76 @@
+// backend/src/server.ts
 import express from "express";
 import cors from "cors";
-import { authMiddleware } from "./middleware/auth";
-import apiRoutes from "./routes/api";
+import { authMiddleware } from "./middleware/auth"; // Ensure path is correct
+import apiRoutes from "./routes/api";           // Ensure path is correct
 
 const app = express();
 
 // --- Configure CORS Options ---
-// Define the origins allowed to access your backend
 const allowedOrigins = [
-    'https://leetnotes.netlify.app', // Your deployed frontend **REQUIRED**
-    // Add 'http://localhost:xxxx' if you still need local frontend development access
-    // e.g., 'http://localhost:5173' if your local React runs there
+    'https://leetnotes.netlify.app', // Your deployed frontend
+    // Add localhost origins if needed for local development
+    // 'http://localhost:3000', // Example if frontend runs locally on 3000 (Vite)
+    // 'http://localhost:5173', // Example if frontend runs locally on 5173 (Vite default)
 ];
 
 const corsOptions: cors.CorsOptions = {
     origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests) OR from allowed origins
-        // Important: origin can be undefined for non-browser requests or certain configurations
+        // Log the origin for every request (including preflight)
+        console.log(`CORS Check: Request Origin: ${origin}`);
+
+        // Allow requests with no origin OR from allowed origins
         if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
+            console.log(`CORS Check: Allowing origin: ${origin || 'No Origin'}`);
+            callback(null, true); // Allow
         } else {
-            console.error(`CORS Error: Origin '${origin}' not allowed.`); // Log blocked origins for debugging
-            callback(new Error('Not allowed by CORS'));
+            console.error(`CORS Check: Blocking origin: ${origin}`); // Log blocked origins
+            callback(new Error(`Origin ${origin} not allowed by CORS`)); // Block
         }
     },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], // Allow standard methods + OPTIONS for preflight
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'], // Explicitly allow headers sent by your frontend
-    credentials: true, // Allow sending cookies or Authorization headers
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], // Standard methods
+    // Ensure all headers sent by frontend are listed, especially custom ones or Authorization
+    allowedHeaders: ['Content-Type', 'Authorization'], // Removed 'x-user-id' as it shouldn't be needed
+    credentials: true, // Allow cookies/auth headers
+    maxAge: 86400, // Optional: Cache preflight response for 1 day
 };
 
-// --- Use the configured CORS middleware ---
-// IMPORTANT: Place this BEFORE any routes or other middleware that needs CORS headers
+// --- Apply CORS Middleware FIRST ---
+// Handle OPTIONS requests explicitly for all routes BEFORE any other routes/middleware
+// This ensures preflight requests are handled correctly.
+app.options('*', cors(corsOptions)); // Respond to all OPTIONS requests
+
+// Use CORS for all other requests
 app.use(cors(corsOptions));
-// Explicitly handle preflight 'OPTIONS' requests for all routes
-// Browsers send this before POST/PUT etc. with custom headers to check permissions
-app.options('*', cors(corsOptions));
 
-// Standard Middleware (AFTER CORS)
-app.use(express.json());
+// --- Standard Middleware (AFTER CORS) ---
+app.use(express.json()); // Parse JSON bodies
 
-// Public route for testing
+// --- Public Routes (Example) ---
 app.get("/", (req, res) => {
-    res.json({ message: "Welcome to the LeetCode Notes API" });
+    res.json({ message: "Welcome to the LeetCode Notes API - v2" });
 });
 
-// Protected API routes (AFTER CORS and express.json)
+// --- Protected API Routes ---
+// Apply auth middleware specifically to the /api routes
+// IMPORTANT: Ensure authMiddleware correctly handles token verification
+// and calls next() ONLY on success, otherwise sends error response.
 app.use("/api", authMiddleware, apiRoutes);
-console.log("API routes mounted");
+console.log("API routes mounted under /api");
 
-// Start server
-// Render provides the PORT environment variable automatically
+// --- Global Error Handler (Optional but Recommended) ---
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error("Unhandled Error:", err.stack || err);
+    res.status(err.status || 500).json({
+        error: "Server Error",
+        message: err.message || "An unexpected error occurred.",
+    });
+});
+
+
+// --- Start Server ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    console.log('Allowed CORS origins:', allowedOrigins); // Log allowed origins on startup
+    console.log('Allowed CORS origins:', allowedOrigins);
 });

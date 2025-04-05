@@ -3,12 +3,12 @@ import { Router } from "express";
 import { exec } from "child_process";
 import axios from "axios";
 import path from 'path';
-import { supabase } from "../supabase";
-import { AuthRequest } from "../middleware/auth";
+import { supabase } from "../supabase"; // Ensure path is correct
+import { AuthRequest } from "../middleware/auth"; // Ensure path is correct
 
 const router = Router();
 
-// --- /fetch-data route (Keep as is - already fixed) ---
+// --- /fetch-data route (Current Version) ---
 router.post("/fetch-data", async (req: AuthRequest, res) => {
     const { username, session_cookie, csrf_token } = req.body;
     const userId = req.userId;
@@ -18,9 +18,9 @@ router.post("/fetch-data", async (req: AuthRequest, res) => {
     }
 
     const projectRoot = path.join(__dirname, '..', '..', '..');
-    const fetcherDirName = 'LeetcodeDataFetcher';
+    const fetcherDirName = 'LeetcodeDataFetcher'; // Make sure this matches your actual folder name
     const fetcherPath = path.join(projectRoot, fetcherDirName, 'main.py');
-    const pythonExecutable = 'python';
+    const pythonExecutable = 'python'; // Assumes python is available and linked correctly on Render
 
     console.log("Calculated Fetcher path:", fetcherPath);
 
@@ -28,15 +28,15 @@ router.post("/fetch-data", async (req: AuthRequest, res) => {
     console.log("Executing command:", command);
 
     exec(command, async (error, stdout, stderr) => {
+        // Error handling from current version
         if (error) {
             console.error("Execution error:", { message: error.message, code: error.code, cmd: error.cmd });
             const detailMessage = stderr ? `${error.message}\nStderr: ${stderr}` : error.message;
+            // Avoid sending potentially sensitive stderr to client
             return res.status(500).json({ error: "Failed to execute Python script", details: `Script execution failed. Check server logs. Code: ${error.code}` });
         }
-
         if (stderr) {
             console.warn("Script stderr:", stderr);
-            // Treat specific errors from stderr as fatal
             if (stderr.includes("Authentication failed") || stderr.includes("Rate limited") || stderr.includes("Traceback") || stderr.toLowerCase().includes("error:")) {
                 console.error("Python script reported critical error via stderr.");
                 return res.status(500).json({
@@ -45,24 +45,23 @@ router.post("/fetch-data", async (req: AuthRequest, res) => {
                 });
             }
         }
-
         if (!stdout || stdout.trim() === "") {
             console.error("Python script produced empty stdout. Stderr:", stderr || '(empty)');
             return res.status(500).json({ error: "Python script did not produce expected data", details: "Fetcher script returned no data. Check server logs." });
         }
+        // --- End Error Handling ---
 
         try {
             const data = JSON.parse(stdout);
-            // Log only structure or small part in production
             // console.log("Parsed data from Python script:", JSON.stringify(data, null, 2).substring(0, 500) + '...');
 
-            // --- Supabase Logic (Keep as is) ---
+            // --- Supabase Logic (Current Version with conflict handling) ---
             const { error: statsError } = await supabase
                 .from("profile_stats")
                 .upsert(
                     {
                         user_id: userId,
-                        total_solved: data.profile_stats?.total_solved || 0, // Add safe navigation
+                        total_solved: data.profile_stats?.total_solved || 0,
                         easy: data.profile_stats?.easy || 0,
                         medium: data.profile_stats?.medium || 0,
                         hard: data.profile_stats?.hard || 0,
@@ -75,112 +74,60 @@ router.post("/fetch-data", async (req: AuthRequest, res) => {
             }
 
             for (const problem of data.problems || []) {
-                // Fetch existing problem ID if it violates unique constraint on insert
                 let problemId: number | string | null = null;
-                let problemDataResult;
-
-                try {
-                    problemDataResult = await supabase
+                try { // Try inserting problem
+                    const { data: problemDataResult, error: problemInsertError } = await supabase
                         .from("problems")
-                        .insert({
-                            user_id: userId,
-                            title: problem.title,
-                            difficulty: problem.difficulty,
-                            description: problem.description,
-                            tags: problem.tags,
-                            slug: problem.slug,
+                        .insert({ /* ... problem fields ... */
+                            user_id: userId, title: problem.title, difficulty: problem.difficulty,
+                            description: problem.description, tags: problem.tags, slug: problem.slug,
                         })
                         .select("id")
                         .single();
-
-                    if (problemDataResult.error) throw problemDataResult.error; // Throw error to be caught below
-                    if (problemDataResult.data) problemId = problemDataResult.data.id;
-
-                } catch (problemInsertError: any) {
-                    if (problemInsertError.code === '23505') { // Unique violation (user_id, slug likely)
+                    if (problemInsertError) throw problemInsertError;
+                    if (problemDataResult) problemId = problemDataResult.id;
+                } catch (problemInsertError: any) { // Handle insert error (e.g., conflict)
+                    if (problemInsertError.code === '23505') {
                         console.warn(`Problem insert skipped (conflict): ${problem.slug} for user ${userId}. Querying existing.`);
-                        const { data: existingProblemData, error: queryError } = await supabase
-                            .from("problems")
-                            .select("id")
-                            .eq("user_id", userId)
-                            .eq("slug", problem.slug)
-                            .single();
-
-                        if (queryError) {
-                            console.error(`Error querying existing problem ${problem.slug}:`, queryError);
-                            continue; // Skip submissions if we can't get problem ID
-                        }
-                        if (existingProblemData) {
-                            problemId = existingProblemData.id;
-                        } else {
-                            console.error(`Conflict on insert but failed to query existing problem ${problem.slug}. Skipping submissions.`);
-                            continue; // Skip submissions
-                        }
-                    } else {
-                        console.error(`Problem insert error for ${problem.slug}:`, problemInsertError);
-                        // Decide whether to continue or return error
-                        // return res.status(500).json({ error: "Failed to store problem", details: problemInsertError.message });
-                        continue; // Let's try to continue with other problems
-                    }
+                        const { data: existingProblemData, error: queryError } = await supabase.from("problems").select("id").eq("user_id", userId).eq("slug", problem.slug).single();
+                        if (queryError) { console.error(`Error querying existing problem ${problem.slug}:`, queryError); continue; }
+                        if (existingProblemData) { problemId = existingProblemData.id; }
+                        else { console.error(`Conflict on insert but failed to query existing problem ${problem.slug}.`); continue; }
+                    } else { console.error(`Problem insert error for ${problem.slug}:`, problemInsertError); continue; }
                 }
 
+                if (!problemId) { console.warn(`Could not get problem ID for ${problem.slug}. Skipping submissions.`); continue; }
 
-                if (!problemId) {
-                    console.warn(`Could not get problem ID for ${problem.slug}. Skipping submissions.`);
-                    continue; // Skip submissions if problem ID wasn't obtained
-                }
-
+                // Insert submissions
                 for (const submission of problem.submissions || []) {
-                    if (!submission.submission_id) {
-                        console.warn(`Submission object missing 'submission_id' for problem ${problem.slug}. Skipping insert.`);
-                        continue;
-                    }
-
+                    if (!submission.submission_id) { console.warn(`Submission object missing 'submission_id' for problem ${problem.slug}.`); continue; }
                     try {
-                        const { error: submissionError } = await supabase
-                            .from("submissions")
-                            .insert({
-                                problem_id: problemId,
-                                user_id: userId,
-                                status: submission.status,
-                                timestamp: submission.timestamp ? new Date(parseInt(submission.timestamp, 10) * 1000).toISOString() : new Date().toISOString(),
-                                runtime: submission.runtime,
-                                memory: submission.memory,
-                                language: submission.language,
-                                submission_id: submission.submission_id, // Correct key
-                                code: submission.code,
-                            }); // Consider adding .select() if needed
-
-                        if (submissionError) throw submissionError; // Throw to be caught
-
+                        const { error: submissionError } = await supabase.from("submissions").insert({ /* ... submission fields ... */
+                            problem_id: problemId, user_id: userId, status: submission.status,
+                            timestamp: submission.timestamp ? new Date(parseInt(submission.timestamp, 10) * 1000).toISOString() : new Date().toISOString(),
+                            runtime: submission.runtime, memory: submission.memory, language: submission.language,
+                            submission_id: submission.submission_id, code: submission.code,
+                        });
+                        if (submissionError) throw submissionError;
                     } catch (submissionInsertError: any) {
-                        if (submissionInsertError.code === '23505') { // Unique violation (submission_id likely)
-                            console.warn(`Submission insert skipped (conflict): ${submission.submission_id}`);
-                        } else {
-                            console.error(`Submission insert error for ${submission.submission_id}:`, submissionInsertError);
-                            // Decide whether to continue or return error for this problem's submissions
-                            // For now, log and continue with the next submission
-                        }
-                        continue; // Continue to next submission on error
+                        if (submissionInsertError.code === '23505') { console.warn(`Submission insert skipped (conflict): ${submission.submission_id}`); }
+                        else { console.error(`Submission insert error for ${submission.submission_id}:`, submissionInsertError); }
+                        continue; // Continue with next submission even if one fails
                     }
                 }
             }
             // --- End Supabase Logic ---
-
-            res.json({ message: "Data fetched and stored successfully." }); // Updated message
-        } catch (parseError: any) {
+            res.json({ message: "Data fetched and stored successfully." });
+        } catch (parseError: any) { // Catch JSON parsing errors
             console.error("JSON Parse error:", parseError);
-            console.error("Raw stdout that failed parsing:", stdout); // Log raw output
-            return res.status(500).json({
-                error: "Invalid data format from fetcher script",
-                details: "Failed to process data from fetcher script. Check server logs.",
-            });
+            console.error("Raw stdout that failed parsing:", stdout);
+            return res.status(500).json({ error: "Invalid data format from fetcher script", details: "Failed to process data. Check server logs." });
         }
     });
 });
 
 
-// --- Generate Notes Route (Refined Error Handling & Logging) ---
+// --- Generate Notes Route (Previous "Working" Version Logic) ---
 router.post("/generate-notes/:problemId", async (req: AuthRequest, res) => {
     const { problemId } = req.params;
     const userId = req.userId;
@@ -394,6 +341,5 @@ Generate the notes specifically analyzing MY attempt at "${problemData.title}". 
         return res.status(500).json({ error: "Failed to generate notes", details: err.message || "An unexpected server error occurred." });
     }
 });
-
 
 export default router;

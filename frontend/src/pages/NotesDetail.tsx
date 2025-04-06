@@ -160,7 +160,7 @@ const NotesDetail: React.FC = () => {
                             <TabsTrigger value="example" className="flex-1 text-[#27374D]">Example</TabsTrigger>
                             <TabsTrigger value="counterexample" className="flex-1 text-[#27374D]">Counterexample</TabsTrigger>
                             <TabsTrigger value="pseudocode" className="flex-1 text-[#27374D]">Pseudocode</TabsTrigger>
-                            <TabsTrigger value="mistake" className="flex-1 text-[#27374D]">Mistakes</TabsTrigger>
+                            <TabsTrigger value="mistake" className="flex-1 text-[#27374D]">Possible Refinements</TabsTrigger>
                             <TabsTrigger value="code" className="flex-1 text-[#27374D]">Code</TabsTrigger>
                         </TabsList>
 

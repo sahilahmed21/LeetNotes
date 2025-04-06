@@ -425,7 +425,7 @@ const Notes: React.FC = () => {
                                         <CardTitle className="text-xl font-semibold text-[#27374D]">Generated Notes</CardTitle>
                                         {notes.created_at && <CardDescription className="text-[#526D82] text-xs pt-1">Generated on: {new Date(notes.created_at).toLocaleString()}</CardDescription>}
                                     </div>
-                                    <Button
+                                    {/* <Button
                                         onClick={handleGenerateNotes}
                                         disabled={generating} // Disable button while generating
                                         variant="outline"
@@ -433,7 +433,7 @@ const Notes: React.FC = () => {
                                         className="bg-[#526D82] text-[#DDE6ED] hover:bg-[#9DB2BF] hover:text-[#27374D]"
                                     >
                                         {generating ? 'Generating...' : 'Regenerate'}
-                                    </Button>
+                                    </Button> */}
                                 </CardHeader>
                                 <CardContent className="pt-4">
                                     {/* Topic and Question */}
@@ -453,7 +453,7 @@ const Notes: React.FC = () => {
                                             <TabsTrigger value="example" className="data-[state=active]:bg-[#526D82]/30 data-[state=active]:text-[#27374D] text-[#3C5B6F]">Example</TabsTrigger>
                                             <TabsTrigger value="counterexample" className="data-[state=active]:bg-[#526D82]/30 data-[state=active]:text-[#27374D] text-[#3C5B6F]">Counter</TabsTrigger>
                                             <TabsTrigger value="pseudocode" className="data-[state=active]:bg-[#526D82]/30 data-[state=active]:text-[#27374D] text-[#3C5B6F]">Pseudo</TabsTrigger>
-                                            <TabsTrigger value="mistake" className="data-[state=active]:bg-[#526D82]/30 data-[state=active]:text-[#27374D] text-[#3C5B6F]">Mistakes</TabsTrigger>
+                                            <TabsTrigger value="mistake" className="data-[state=active]:bg-[#526D82]/30 data-[state=active]:text-[#27374D] text-[#3C5B6F]">Possible Refinements</TabsTrigger>
                                             <TabsTrigger value="code" className="data-[state=active]:bg-[#526D82]/30 data-[state=active]:text-[#27374D] text-[#3C5B6F]">Code</TabsTrigger>
                                         </TabsList>
 

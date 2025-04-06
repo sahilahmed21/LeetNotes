@@ -231,11 +231,9 @@ const FetchForm: React.FC<FetchFormProps> = ({ userId, onFetch }) => {
                     >
                         {loading ? (
                             // Example's loading spinner
-                            <div>
-                                <div className="w-5 h-5 border-2 border-[#DDE6ED] border-t-transparent rounded-full animate-spin"><div className="w-5 h-5 border-2 border-[#DDE6ED] ">please wait it may take upto 10 minutes</div></div>
-                            </div>
+                            <div className="w-5 h-5 border-2 border-[#DDE6ED] border-t-transparent rounded-full animate-spin"></div>
                         ) : (
-                            "Fetch Data"
+                            "Fetch Data" // Original button text
                         )}
                     </Button>
                 </form>
@@ -247,3 +245,13 @@ const FetchForm: React.FC<FetchFormProps> = ({ userId, onFetch }) => {
 
 export default FetchForm;
 
+// Don't forget to render <Toaster /> in your main layout or page file
+// e.g., in your app/layout.tsx or relevant page component:
+// import { Toaster } from "../components/ui/toaster"
+// ...
+// return (
+//   <body>
+//     {children}
+{/* <Toaster /> */ }
+//   </body>
+// )

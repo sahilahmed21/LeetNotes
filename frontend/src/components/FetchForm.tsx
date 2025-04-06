@@ -127,7 +127,7 @@ const FetchForm: React.FC<FetchFormProps> = ({ userId, onFetch }) => {
         // Apply Card styling from example
         <Card className="bg-[#526D82]"> {/* Specific background color from example */}
             <CardHeader className="pb-2">
-                <CardTitle className="text-xl font-semibold text-[#DDE6ED]">Fetch LeetCode Data</CardTitle> {/* Specific text color */}
+                <CardTitle className="text-xl font-semibold text-[#DDE6ED]">Fetch LeetCode Data (this may take upto 5 Minutes)</CardTitle> {/* Specific text color */}
             </CardHeader>
 
             {/* Use example's error display style, driven by original error state */}

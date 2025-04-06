@@ -232,8 +232,7 @@ const FetchForm: React.FC<FetchFormProps> = ({ userId, onFetch }) => {
                         {loading ? (
                             // Example's loading spinner
                             <div>
-                                <div className="w-5 h-5 border-2 border-[#DDE6ED] border-t-transparent rounded-full animate-spin"></div>
-                                <div className="w-5 h-5 border-2 border-[#DDE6ED] border-t-transparent rounded-full ">please wait it may take upto 10 minutes</div>
+                                <div className="w-5 h-5 border-2 border-[#DDE6ED] border-t-transparent rounded-full animate-spin"><div className="w-5 h-5 border-2 border-[#DDE6ED] ">please wait it may take upto 10 minutes</div></div>
                             </div>
                         ) : (
                             "Fetch Data"

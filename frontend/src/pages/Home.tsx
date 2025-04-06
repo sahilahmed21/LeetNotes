@@ -1,19 +1,24 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react"; // Import useMemo
+import React, { useState, useEffect } from "react";
 import { supabase } from "../supabase";
-import Login from "../components/Login"; // Adjust path if needed
+import Login from "../components/Login";
 import { Link, useNavigate } from "react-router-dom";
-// Import necessary UI components
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
 import { Separator } from "../components/ui/separator";
 import { Badge } from "../components/ui/badge";
 import { Skeleton } from "../components/ui/skeleton";
-import { Input } from "../components/ui/input"; // Import Input for search
 
-// Interfaces (keep as is)
-interface Submission { /* ... */ }
+interface Submission {
+    id: string;
+    status: string;
+    language: string;
+    runtime: string;
+    memory: string;
+    code: string;
+}
+
 interface ProblemData {
     id: string;
     title: string;
@@ -22,24 +27,24 @@ interface ProblemData {
     tags: string[];
     submissions: Submission[];
     user_id: string;
-    fetch_order?: number; // Include if using fetch_order method
 }
-interface ProfileStatsData { /* ... */ }
+
+interface ProfileStatsData {
+    user_id: string;
+    total_solved: number;
+    easy: number;
+    medium: number;
+    hard: number;
+}
 
 const Home: React.FC = () => {
     const [user, setUser] = useState<any>(null);
     const [profileStats, setProfileStats] = useState<ProfileStatsData | null>(null);
-    const [problems, setProblems] = useState<ProblemData[]>([]); // Holds ALL fetched problems
+    const [problems, setProblems] = useState<ProblemData[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const navigate = useNavigate();
 
-    // --- State for Filtering ---
-    const [searchTerm, setSearchTerm] = useState(""); // For title search
-    const [selectedTags, setSelectedTags] = useState<string[]>([]); // For tag filtering
-    const [filteredProblems, setFilteredProblems] = useState<ProblemData[]>([]); // Holds filtered results
-
-    // --- Fetching Logic (useEffect) ---
     useEffect(() => {
         const validateAndSetSession = async () => {
             setLoading(true);
@@ -49,12 +54,9 @@ const Home: React.FC = () => {
                 setLoading(false);
                 return;
             }
+
             setUser(sessionData.session.user);
-            // Fetch data only after user is confirmed
-            // fetchUserData is called inside onAuthStateChange or here if needed initially
-            if (sessionData.session.user) {
-                await fetchUserData(sessionData.session.user.id);
-            }
+            await fetchUserData(sessionData.session.user.id);
             setLoading(false);
         };
 
@@ -66,242 +68,234 @@ const Home: React.FC = () => {
 
             if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
                 if (currentUser) {
-                    fetchUserData(currentUser.id); // Fetch data on sign-in/refresh
+                    fetchUserData(currentUser.id);
                 }
             } else if (event === "SIGNED_OUT") {
                 setProfileStats(null);
                 setProblems([]);
-                setFilteredProblems([]); // Clear filtered problems on sign out
                 setError(null);
                 setLoading(false);
-                navigate("/login"); // Or your login route
+                navigate("/login");
             }
         });
 
         return () => {
             authListener.subscription.unsubscribe();
         };
-    }, [navigate]); // Add navigate to dependency array
+    }, [navigate]);
 
-    // Fetch user stats and problems
     const fetchUserData = async (userId: string) => {
         setLoading(true);
         setError(null);
-        setProblems([]); // Clear previous problems
-        setFilteredProblems([]); // Clear filtered problems
 
         try {
-            // Fetch Stats (keep as is)
             const { data: statsData, error: statsError } = await supabase
-                .from("profile_stats").select("*").eq("user_id", userId).maybeSingle();
-            if (statsError) { console.error("Stats fetch error:", statsError); /* Optionally set error */ }
+                .from("profile_stats")
+                .select("*")
+                .eq("user_id", userId)
+                .maybeSingle();
+
+            if (statsError) {
+                setError("Failed to fetch profile stats.");
+                setLoading(false);
+                return;
+            }
             setProfileStats(statsData);
 
-            // Fetch Problems with ordering
             const { data: problemsData, error: problemsError } = await supabase
                 .from("problems")
-                .select("*, submissions(*)") // Keep submissions if needed elsewhere, otherwise simplify select
-                .eq("user_id", userId)
-                // *** APPLY ORDERING HERE (Choose one) ***
-                // Option 1: Order by creation time (approximates fetch order)
-                .order('created_at', { ascending: false }); // false = newest first
-            // Option 2: Order by explicit fetch_order column (if added)
-            // .order('fetch_order', { ascending: true });
+                .select("*, submissions(*)")
+                .eq("user_id", userId);
 
-            if (problemsError) { throw problemsError; }
+            if (problemsError) {
+                setError("Failed to fetch problems.");
+                setProblems([]);
+                setLoading(false);
+                return;
+            }
 
             setProblems(problemsData || []);
-            // Initially, filtered problems are all problems
-            setFilteredProblems(problemsData || []);
-
-        } catch (err: any) {
-            console.error("Error fetching user data:", err);
-            setError("Failed to fetch user data.");
+        } catch (err) {
+            setError("An unexpected error occurred.");
             setProblems([]);
-            setFilteredProblems([]);
             setProfileStats(null);
         } finally {
             setLoading(false);
         }
     };
 
-    // --- Filtering Logic (useEffect) ---
-    useEffect(() => {
-        let result = problems;
-
-        // 1. Filter by Search Term (Title)
-        if (searchTerm) {
-            result = result.filter(problem =>
-                problem.title.toLowerCase().includes(searchTerm.toLowerCase())
-            );
+    const handleLogout = async () => {
+        setLoading(true);
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+            setError("Failed to log out.");
         }
-
-        // 2. Filter by Selected Tags
-        if (selectedTags.length > 0) {
-            result = result.filter(problem =>
-                selectedTags.every(tag => problem.tags?.includes(tag)) // Check if problem.tags includes ALL selected tags
-            );
-        }
-
-        setFilteredProblems(result);
-    }, [searchTerm, selectedTags, problems]); // Re-run filter when search, tags, or base problems change
-
-
-    // --- Get Unique Tags for Filter UI ---
-    const uniqueTags = useMemo(() => {
-        const allTags = problems.flatMap(p => p.tags || []);
-        return Array.from(new Set(allTags)).sort(); // Get unique tags and sort alphabetically
-    }, [problems]);
-
-
-    // --- Tag Click Handler ---
-    const handleTagClick = (tag: string) => {
-        setSelectedTags(prevTags =>
-            prevTags.includes(tag)
-                ? prevTags.filter(t => t !== tag) // Remove tag if already selected
-                : [...prevTags, tag] // Add tag if not selected
-        );
+        setLoading(false);
     };
 
-    // --- Logout Handler (keep as is) ---
-    const handleLogout = async () => { /* ... */ };
-
-    // --- Conditional Rendering for Login (keep as is) ---
-    if (!user && !loading) { // Show login only if not logged in AND not initially loading session
+    if (!user) {
         return <Login onLogin={(loggedInUser) => setUser(loggedInUser)} />;
     }
-    // --- End Conditional Rendering ---
 
-
-    // --- Main Component JSX ---
     return (
         <div className="min-h-screen bg-[#27374D]">
-            {/* Header (keep as is) */}
             <header className="sticky top-0 z-10 flex items-center justify-between p-4 bg-[#27374D] shadow-md">
                 <h1 className="text-2xl font-bold text-[#DDE6ED]">LeetNotes</h1>
                 <div className="flex gap-2">
-                    <Button asChild variant="secondary" className="...">
+                    <Button
+                        asChild
+                        variant="secondary"
+                        className="bg-[#526D82] text-[#DDE6ED] hover:bg-[#9DB2BF] hover:text-[#27374D]"
+                    >
                         <Link to="/fetch">Fetch Data</Link>
                     </Button>
-                    <Button onClick={handleLogout} variant="secondary" className="..." disabled={loading}>
+                    <Button
+                        onClick={handleLogout}
+                        variant="secondary"
+                        className="bg-[#526D82] text-[#DDE6ED] hover:bg-[#9DB2BF] hover:text-[#27374D]"
+                        disabled={loading}
+                    >
                         Logout
                     </Button>
                 </div>
             </header>
 
             <main className="container px-4 py-8 mx-auto">
-                {/* Welcome Section (keep as is) */}
-                {user && (
-                    <section className="mb-6">
-                        <h2 className="mb-4 text-xl font-semibold text-[#9DB2BF]">Welcome, {user.email}</h2>
-                    </section>
-                )}
-
-                <Separator className="my-8 bg-[#526D82]" />
-
-                {/* Stats Section (keep as is) */}
-                <section className="mb-8">
-                    <h2 className="mb-4 text-xl font-semibold text-[#9DB2BF]">Your Stats</h2>
-                    {/* ... existing stats rendering logic ... */}
+                <section className="mb-6">
+                    <h2 className="mb-4 text-xl font-semibold text-[#9DB2BF]">Welcome, {user.email}</h2>
                 </section>
 
                 <Separator className="my-8 bg-[#526D82]" />
 
-                {/* Problems Section */}
-                <section>
-                    <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-                        <h2 className="text-xl font-semibold text-[#9DB2BF]">Your Problems</h2>
-                        {/* Search Input */}
-                        <Input
-                            type="text"
-                            placeholder="Search by title..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full md:w-64 bg-[#DDE6ED] text-[#27374D] placeholder:text-[#526D82]/80"
-                        />
-                    </div>
-
-                    {/* Tag Filter Area */}
-                    {uniqueTags.length > 0 && (
-                        <div className="mb-6">
-                            <h3 className="mb-2 text-sm font-medium text-[#9DB2BF] uppercase tracking-wider">Filter by Tags:</h3>
-                            <div className="flex flex-wrap gap-2">
-                                {uniqueTags.map(tag => (
-                                    <Badge
-                                        key={tag}
-                                        variant={selectedTags.includes(tag) ? "default" : "outline"} // Highlight selected tags
-                                        onClick={() => handleTagClick(tag)}
-                                        className={`cursor-pointer transition-colors ${selectedTags.includes(tag)
-                                                ? 'bg-[#DDE6ED] text-[#27374D] border-[#DDE6ED]' // Style for selected tag
-                                                : 'bg-[#526D82]/60 text-[#DDE6ED] border-[#9DB2BF]/50 hover:bg-[#9DB2BF]/70' // Style for unselected tag
-                                            }`}
-                                    >
-                                        {tag}
-                                    </Badge>
-                                ))}
-                                {selectedTags.length > 0 && (
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => setSelectedTags([])} // Clear all selected tags
-                                        className="h-auto px-2 py-1 text-xs text-[#9DB2BF] hover:text-[#DDE6ED]"
-                                    >
-                                        Clear Filters
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Problems Grid/List */}
-                    {error && <div className="p-4 mb-4 text-red-800 bg-red-100 rounded-md">{error}</div>}
-
-                    {/* Loading Skeletons */}
-                    {loading && problems.length === 0 && ( // Show skeletons only during initial load
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            {[...Array(6)].map((_, i) => (
-                                <Card key={i} className="overflow-hidden bg-[#DDE6ED]">
-                                    <CardHeader className="pb-2"><Skeleton className="h-6 w-3/4" /><Skeleton className="h-6 w-16 rounded-full" /></CardHeader>
-                                    <CardContent className="pb-4"><Skeleton className="h-4 mb-3 w-full" /><Skeleton className="h-4 mb-3 w-5/6" /><div className="flex flex-wrap gap-2 mb-4"><Skeleton className="h-4 w-16 rounded-full" /><Skeleton className="h-4 w-16 rounded-full" /></div></CardContent>
-                                    <CardFooter><Skeleton className="h-9 w-full" /></CardFooter>
+                <section className="mb-8">
+                    <h2 className="mb-4 text-xl font-semibold text-[#9DB2BF]">Your Stats</h2>
+                    {loading && !profileStats && (
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                            {[...Array(4)].map((_, i) => (
+                                <Card key={i} className="bg-[#3C5B6F]">
+                                    <CardContent className="pt-6">
+                                        <Skeleton className="w-3/4 h-6 mb-2" />
+                                        <Skeleton className="w-1/2 h-8" />
+                                    </CardContent>
                                 </Card>
                             ))}
                         </div>
                     )}
-
-                    {/* No Data/Results Messages */}
-                    {!loading && problems.length === 0 && !error && ( // No problems fetched at all
-                        <Card className="p-8 text-center bg-[#526D82]">
-                            <CardContent className="pt-6"> <p className="text-[#DDE6ED]">No problems found. Fetch your LeetCode data to see problems here.</p> </CardContent>
+                    {!loading && !profileStats && !error && (
+                        <Card className="bg-[#526D82]">
+                            <CardContent className="pt-6">
+                                <p className="text-center text-[#DDE6ED]">No stats available. Fetch data to see your stats.</p>
+                            </CardContent>
                         </Card>
                     )}
-                    {!loading && problems.length > 0 && filteredProblems.length === 0 && !error && ( // Problems fetched, but none match filters
-                        <Card className="p-8 text-center bg-[#526D82]">
-                            <CardContent className="pt-6"> <p className="text-[#DDE6ED]">No problems match the current filters.</p> </CardContent>
-                        </Card>
+                    {profileStats && (
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                            <Card className="bg-[#DDE6ED]">
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-lg font-medium text-[#27374D]">Total Solved</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-3xl font-bold text-[#526D82]">{profileStats.total_solved}</p>
+                                </CardContent>
+                            </Card>
+                            <Card className="bg-[#DDE6ED]">
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-lg font-medium text-[#27374D]">Easy</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-3xl font-bold text-green-500">{profileStats.easy}</p>
+                                </CardContent>
+                            </Card>
+                            <Card className="bg-[#DDE6ED]">
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-lg font-medium text-[#27374D]">Medium</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-3xl font-bold text-yellow-500">{profileStats.medium}</p>
+                                </CardContent>
+                            </Card>
+                            <Card className="bg-[#DDE6ED]">
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-lg font-medium text-[#27374D]">Hard</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-3xl font-bold text-red-500">{profileStats.hard}</p>
+                                </CardContent>
+                            </Card>
+                        </div>
                     )}
+                </section>
 
-                    {/* Display Filtered Problems */}
-                    {!loading && filteredProblems.length > 0 && (
+                <Separator className="my-8 bg-[#526D82]" />
+
+                <section>
+                    <h2 className="mb-4 text-xl font-semibold text-[#9DB2BF]">Your Problems</h2>
+                    {error && <div className="p-4 mb-4 text-red-800 bg-red-100 rounded-md">{error}</div>}
+                    {loading && problems.length === 0 && (
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            {/* *** MAP OVER filteredProblems INSTEAD OF problems *** */}
-                            {filteredProblems.map((problem) => {
-                                // --- Difficulty Badge Logic (keep as is) ---
-                                const difficultyVariant = (difficulty: string): "outline" | "secondary" | "destructive" | "default" => { /* ... */ };
-                                const difficultyClass = (difficulty: string): string => { /* ... */ };
-                                // --- End Difficulty Badge Logic ---
+                            {[...Array(6)].map((_, i) => (
+                                <Card key={i} className="overflow-hidden bg-[#DDE6ED]">
+                                    <CardHeader className="pb-2">
+                                        <div className="flex items-center justify-between">
+                                            <Skeleton className="h-6 w-3/4" />
+                                            <Skeleton className="h-6 w-16 rounded-full" />
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="pb-4">
+                                        <Skeleton className="h-4 mb-3 w-full" />
+                                        <Skeleton className="h-4 mb-3 w-5/6" />
+                                        <div className="flex flex-wrap gap-2 mb-4">
+                                            <Skeleton className="h-4 w-16 rounded-full" />
+                                            <Skeleton className="h-4 w-16 rounded-full" />
+                                        </div>
+                                    </CardContent>
+                                    <CardFooter>
+                                        <Skeleton className="h-9 w-full" />
+                                    </CardFooter>
+                                </Card>
+                            ))}
+                        </div>
+                    )}
+                    {!loading && problems.length === 0 && !error && (
+                        <Card className="p-8 text-center bg-[#526D82]">
+                            <CardContent className="pt-6">
+                                <p className="text-[#DDE6ED]">No problems found. Fetch your LeetCode data to see problems here.</p>
+                            </CardContent>
+                        </Card>
+                    )}
+                    {!loading && problems.length > 0 && (
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                            {problems.map((problem) => {
+                                const difficultyVariant = (difficulty: string): "outline" | "secondary" | "destructive" | "default" => {
+                                    switch (difficulty?.toLowerCase()) {
+                                        case 'easy': return 'default';
+                                        case 'medium': return 'secondary';
+                                        case 'hard': return 'destructive';
+                                        default: return 'outline';
+                                    }
+                                };
+                                const difficultyClass = (difficulty: string): string => {
+                                    switch (difficulty?.toLowerCase()) {
+                                        case 'easy': return 'bg-green-100 text-green-800 border-green-300';
+                                        case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+                                        case 'hard': return 'bg-red-100 text-red-800 border-red-300';
+                                        default: return 'bg-gray-100 text-gray-800 border-gray-300';
+                                    }
+                                };
 
                                 return (
                                     <Card key={problem.id} className="flex flex-col overflow-hidden bg-[#DDE6ED] hover:shadow-lg transition-shadow">
                                         <CardHeader className="pb-2">
                                             <div className="flex items-start justify-between gap-2">
                                                 <CardTitle className="text-lg font-semibold text-[#27374D] hover:text-[#27374D]/80" title={problem.title}>
-                                                    {/* Link to notes page */}
                                                     <Link to={`/notes/${problem.id}`} className="hover:underline">
                                                         {problem.title}
                                                     </Link>
                                                 </CardTitle>
-                                                <Badge variant={difficultyVariant(problem.difficulty)} className={`flex-shrink-0 ${difficultyClass(problem.difficulty)}`}>
+                                                <Badge
+                                                    variant={difficultyVariant(problem.difficulty)}
+                                                    className={`flex-shrink-0 ${difficultyClass(problem.difficulty)}`}
+                                                >
                                                     {problem.difficulty}
                                                 </Badge>
                                             </div>
@@ -310,7 +304,7 @@ const Home: React.FC = () => {
                                             <p className="mb-3 text-sm text-[#526D82] line-clamp-2">{problem.description || "No description available."}</p>
                                             <div className="flex flex-wrap gap-1 mb-2">
                                                 {(problem.tags || []).map((tag, index) => (
-                                                    <Badge key={index} variant="outline" className="text-xs bg-[#526D82]/50 text-[#3C5B6F] border-[#526D82]/60">
+                                                    <Badge key={index} variant="outline" className="text-xs bg-[#526D82] bg-opacity-50 text-[#3C5B6F] border-[#526D82]/60">
                                                         {tag}
                                                     </Badge>
                                                 ))}
